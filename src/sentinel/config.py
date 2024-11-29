@@ -10,12 +10,12 @@ load_dotenv()
 
 class Settings:
     def __init__(self):
+        print("Initializing settings")
         # Sentinel API settings
-        self.api_key = os.getenv('SENTINEL_API_KEY')
-        self.api_url = os.getenv('SENTINEL_API_URL', 'https://api.sentinel.entropy-labs.ai')
-        
-        # OpenAI settings
+        self.api_key = os.getenv('SENTINEL_API_KEY', 'Unused')
+        self.api_url = os.getenv('SENTINEL_API_URL')
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
+        self.project_id = None
         
         # Validate required settings
         if not self.api_key:

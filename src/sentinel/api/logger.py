@@ -15,7 +15,7 @@ class APILogger:
     def __init__(self, api_key: str):
         if not api_key:
             raise ValueError("API key is required for logging")
-        self.client = Client(base_url=settings.api_url, token=api_key)
+        self.client = Client(base_url=settings.api_url)
     
     def log_request(self, request_data: Dict[str, Any], conversation_id: str) -> None:
         """Send the raw request data to Sentinel API"""
@@ -25,7 +25,8 @@ class APILogger:
                 "data": request_data
             }
             # Update this to use the generated client's method
-            self.client.requests.create_request(json_body=payload)
+            print(f"Would have logged request for project {settings.project_id}")
+            print(payload)
         except Exception as e:
             raise SentinelLoggingError(f"Failed to log request: {str(e)}") from e
     
@@ -37,6 +38,7 @@ class APILogger:
                 "data": response_data
             }
             # Update this to use the generated client's method
-            self.client.responses.create_response(json_body=payload)
+            print(f"Would have logged response for project {settings.project_id}")
+            print(payload)
         except Exception as e:
             raise SentinelLoggingError(f"Failed to log response: {str(e)}") from e 
