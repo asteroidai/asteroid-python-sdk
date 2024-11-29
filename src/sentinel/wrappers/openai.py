@@ -7,7 +7,7 @@ from uuid import uuid4
 from openai import OpenAIError
 from sentinel.api.logger import APILogger, SentinelLoggingError
 from sentinel.config import settings
-from sentinel.registration.helper import register_project
+from sentinel.registration.helper import register_project, register_task
 
 class CompletionsWrapper:
     """Wraps chat completions with logging capabilities"""
@@ -52,7 +52,7 @@ class CompletionsWrapper:
             
             raise
 
-def wrap_client(client: Any, project_name: str = "default") -> Any:
+def wrap_client(client: Any, project_name: str = "My Project", task_name: str = "Agent X") -> Any:
     """
     Wraps an OpenAI client instance with logging capabilities and ensures project registration.
     
@@ -77,6 +77,15 @@ def wrap_client(client: Any, project_name: str = "default") -> Any:
             except ValueError as e:
                 print(f"Warning: Project registration failed: {str(e)}")
                 print("Continuing without project registration...")
+
+        # Register task if no task_id exists
+        if not settings.task_id:
+            try:
+                task_id = register_task(settings.project_id, task_name)
+                print(f"Registered new task with ID: {task_id}")
+            except ValueError as e:
+                print(f"Warning: Task registration failed: {str(e)}")
+                print("Continuing without task registration...")
         
         logger = APILogger(settings.api_key)
         client.chat.completions = CompletionsWrapper(client.chat.completions, logger)
