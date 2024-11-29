@@ -1,7 +1,7 @@
 from sentinel.supervision.registry import supervise
 
 # Define a supervisor
-def human_supervisor():
+def my_supervisor():
     """Human supervisor for reviewing actions."""
     def supervisor(action, context):
         # Supervisor implementation
@@ -10,7 +10,7 @@ def human_supervisor():
     return supervisor
 
 # Use the decorator
-@supervise(supervision_functions=[[human_supervisor()]])
+@supervise(supervision_functions=[[my_supervisor()]])
 def book_flight(departure_city: str, arrival_city: str, datetime: str, maximum_price: float):
     """Book a flight ticket."""
     return f"Flight booked from {departure_city} to {arrival_city} on {datetime}."
