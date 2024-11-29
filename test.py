@@ -1,14 +1,23 @@
+from sentinel.supervision.registry import supervise
+
+# Define a supervisor
+def human_supervisor():
+    """Human supervisor for reviewing actions."""
+    def supervisor(action, context):
+        # Supervisor implementation
+        print(f"Supervisor received action: {action}")
+        pass
+    return supervisor
+
+# Use the decorator
+@supervise(supervision_functions=[[human_supervisor()]])
+def book_flight(departure_city: str, arrival_city: str, datetime: str, maximum_price: float):
+    """Book a flight ticket."""
+    return f"Flight booked from {departure_city} to {arrival_city} on {datetime}."
+
+# When you wrap the client, all supervised functions will be registered
 from openai import OpenAI
 from sentinel.wrappers.openai import wrap_client
 
-# Create OpenAI client
 client = OpenAI()
-
-# Wrap it with Sentinel logging and project registration
-wrapped_client = wrap_client(client, project_name="my-awesome-project")
-
-# Use it normally - project is already registered
-response = wrapped_client.chat.completions.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
+wrapped_client = wrap_client(client, project_name="my-project")

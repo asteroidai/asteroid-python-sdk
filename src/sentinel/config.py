@@ -19,6 +19,7 @@ class Settings:
 
         self.project_id = None
         self.task_id = None
+        self.run_id = None
         
         # Validate required settings
         if not self.api_key:

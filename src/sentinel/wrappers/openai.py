@@ -7,7 +7,8 @@ from uuid import uuid4
 from openai import OpenAIError
 from sentinel.api.logger import APILogger, SentinelLoggingError
 from sentinel.config import settings
-from sentinel.registration.helper import register_project, register_task
+from sentinel.registration.helper import create_run, register_project, register_task, APIClientFactory
+from sentinel.supervision.registry import registry
 
 class CompletionsWrapper:
     """Wraps chat completions with logging capabilities"""
@@ -52,40 +53,30 @@ class CompletionsWrapper:
             
             raise
 
-def wrap_client(client: Any, project_name: str = "My Project", task_name: str = "Agent X") -> Any:
+def wrap_client(client: Any, project_name: str = "My Project", task_name: str = "My Agent") -> Any:
     """
-    Wraps an OpenAI client instance with logging capabilities and ensures project registration.
-    
-    Args:
-        client: An instance of the OpenAI client
-        project_name: Name for the Sentinel project (default: "default")
-        
-    Returns:
-        The wrapped OpenAI client instance with logging enabled
+    Wraps an OpenAI client instance with logging capabilities and registers supervisors.
     """
     if not client:
         raise ValueError("Client is required")
-    if not hasattr(client, 'chat') or not hasattr(client.chat, 'completions'):
-        raise ValueError("Invalid OpenAI client: missing chat.completions")
+    
+    if not hasattr(client, 'chat'):
+        raise ValueError("Invalid OpenAI client: missing chat attribute")
         
     try:
         # Register project if no project_id exists
         if not settings.project_id:
-            try:
-                project_id = register_project(project_name)
-                print(f"Registered new project '{project_name}' with ID: {project_id}")
-            except ValueError as e:
-                print(f"Warning: Project registration failed: {str(e)}")
-                print("Continuing without project registration...")
+            project_id = register_project(project_name)
+            print(f"Registered new project '{project_name}' with ID: {project_id}")
+        
+        # Register all supervised functions and their supervisors
+        supervised_functions = registry.get_supervised_functions()
+        for func_name, func_info in supervised_functions.items():
+            print(f"Registering supervised function: {func_name}")
+            # Here you would call your API to register the function and its supervisors
+            # Using the APIClientFactory to get the client
+            # TODO: Implement the API calls to register tools and supervisors
 
-        # Register task if no task_id exists
-        if not settings.task_id:
-            try:
-                task_id = register_task(settings.project_id, task_name)
-                print(f"Registered new task with ID: {task_id}")
-            except ValueError as e:
-                print(f"Warning: Task registration failed: {str(e)}")
-                print("Continuing without task registration...")
         
         logger = APILogger(settings.api_key)
         client.chat.completions = CompletionsWrapper(client.chat.completions, logger)
