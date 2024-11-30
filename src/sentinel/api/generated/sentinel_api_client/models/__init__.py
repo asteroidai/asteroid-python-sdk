@@ -5,6 +5,8 @@ from .chain_execution import ChainExecution
 from .chain_execution_state import ChainExecutionState
 from .chain_request import ChainRequest
 from .choice import Choice
+from .create_new_chat_completion_request_body import CreateNewChatCompletionRequestBody
+from .create_new_chat_completion_response_body import CreateNewChatCompletionResponseBody
 from .create_project_body import CreateProjectBody
 from .create_run_tool_body import CreateRunToolBody
 from .create_run_tool_body_attributes import CreateRunToolBodyAttributes
@@ -51,6 +53,8 @@ __all__ = (
     "ChainExecutionState",
     "ChainRequest",
     "Choice",
+    "CreateNewChatCompletionRequestBody",
+    "CreateNewChatCompletionResponseBody",
     "CreateProjectBody",
     "CreateRunToolBody",
     "CreateRunToolBodyAttributes",

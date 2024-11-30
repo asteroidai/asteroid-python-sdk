@@ -23,7 +23,7 @@ class CompletionsWrapper:
         
         # Log the entire request payload
         try:
-            self.logger.log_request(kwargs, conversation_id)
+            self.logger.log_request(kwargs)
         except SentinelLoggingError as e:
             print(f"Warning: Failed to log request: {str(e)}")
         
@@ -34,7 +34,7 @@ class CompletionsWrapper:
             # Log the entire response
             try:
                 response_data = response if isinstance(response, dict) else response.dict()
-                self.logger.log_response(response_data, conversation_id)
+                self.logger.log_response(response_data)
             except Exception as e:
                 print(f"Warning: Failed to log response: {str(e)}")
             
