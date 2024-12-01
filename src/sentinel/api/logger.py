@@ -9,7 +9,7 @@ from uuid import UUID
 from sentinel.api.generated.sentinel_api_client import Client
 from sentinel.api.generated.sentinel_api_client.models.create_new_chat_completion_request_body import CreateNewChatCompletionRequestBody
 from sentinel.api.generated.sentinel_api_client.models.create_new_chat_completion_response_body import CreateNewChatCompletionResponseBody
-from sentinel.config import settings
+from sentinel.settings import settings
 from sentinel.api.generated.sentinel_api_client.api.run.create_new_chat_completion_request import sync_detailed as create_new_chat_completion_request_sync_detailed
 from sentinel.api.generated.sentinel_api_client.api.run.create_new_chat_completion_response import sync_detailed as create_new_chat_completion_response_sync_detailed
 
@@ -25,7 +25,7 @@ class APILogger:
             raise ValueError("API key is required for logging")
         self.client = Client(base_url=settings.api_url)
     
-    def log_request(self, request_data: Dict[str, Any]) -> None:
+    def log_request(self, request_data: Dict[str, Any], run_id: UUID) -> None:
         """Send the raw request data to Sentinel API"""
         try:
             # Convert the request data to a string
@@ -40,7 +40,7 @@ class APILogger:
 
             response = create_new_chat_completion_request_sync_detailed(
                 client=self.client,
-                run_id=settings.run_id,
+                run_id=run_id,
                 body=body
             )
 
@@ -49,7 +49,7 @@ class APILogger:
                 and response.parsed is not None
             ):
                 if isinstance(response.parsed, UUID):
-                    print(f"Logged request for project {settings.project_id} with ID {response.parsed}")
+                    print(f"Logged request for run {run_id}")
                 else:
                     raise ValueError("Unexpected response type. Expected UUID.")
             else:
@@ -57,7 +57,7 @@ class APILogger:
         except Exception as e:
             raise SentinelLoggingError(f"Failed to log request: {str(e)}") from e
     
-    def log_response(self, response_data: Dict[str, Any]) -> None:
+    def log_response(self, response_data: Dict[str, Any], run_id: UUID) -> None:
         """Send the raw response data to Sentinel API"""
         try:
             # Convert the response data to a string
@@ -72,7 +72,7 @@ class APILogger:
 
             response = create_new_chat_completion_response_sync_detailed(
                 client=self.client,
-                run_id=settings.run_id,
+                run_id=run_id,
                 body=body
             )
             
@@ -80,7 +80,7 @@ class APILogger:
                 response.status_code in [200, 201]
                 and response.parsed is not None
             ):
-                print(f"Logged response for project {settings.project_id} with ID {response.parsed}")
+                print(f"Logged response for run {run_id}")
             else:
                 raise ValueError(f"Failed to log LLM response. Response: {response}") 
         except Exception as e:

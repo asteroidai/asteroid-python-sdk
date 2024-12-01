@@ -2,6 +2,6 @@
 Sentinel SDK package initialization.
 """
 
-from .config import settings
+from .settings import settings
 
-__all__ = ['config']
+__all__ = ['settings']

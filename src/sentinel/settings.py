@@ -17,10 +17,6 @@ class Settings:
         self.api_url = os.getenv('SENTINEL_API_URL')
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
 
-        self.project_id = None
-        self.task_id = None
-        self.run_id = None
-        
         # Validate required settings
         if not self.api_key:
             raise ValueError("SENTINEL_API_KEY environment variable is required")

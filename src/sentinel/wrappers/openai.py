@@ -2,28 +2,35 @@
 Wrapper for the OpenAI client to intercept requests and responses.
 """
 
-from typing import Any
-from uuid import uuid4
+import json
+from typing import Any, Callable, List, Optional
+from uuid import UUID, uuid4
 from openai import OpenAIError
 from sentinel.api.logger import APILogger, SentinelLoggingError
-from sentinel.config import settings
-from sentinel.registration.helper import create_run, register_project, register_task, APIClientFactory
-from sentinel.supervision.registry import registry
+from sentinel.settings import settings
+from sentinel.registration.helper import create_run, register_project, register_task, APIClientFactory, register_tools_and_supervisors
 import inspect
+from sentinel.supervision.config import get_supervision_config, get_supervision_context
 
 class CompletionsWrapper:
     """Wraps chat completions with logging capabilities"""
-    def __init__(self, completions: Any, logger: APILogger):
+    def __init__(
+        self, 
+        completions: Any, 
+        logger: APILogger, 
+        run_id: UUID
+    ):
         self._completions = completions
         self.logger = logger
+        self.run_id = run_id
     
     def create(self, *args, **kwargs) -> Any:
         # Extract or generate conversation ID
         conversation_id = kwargs.pop('conversation_id', str(uuid4()))
-        
+
         # Log the entire request payload
         try:
-            self.logger.log_request(kwargs)
+            self.logger.log_request(kwargs, self.run_id)
         except SentinelLoggingError as e:
             print(f"Warning: Failed to log request: {str(e)}")
         
@@ -34,7 +41,7 @@ class CompletionsWrapper:
             # Log the entire response
             try:
                 response_data = response if isinstance(response, dict) else response.dict()
-                self.logger.log_response(response_data)
+                self.logger.log_response(response_data, self.run_id)
             except Exception as e:
                 print(f"Warning: Failed to log response: {str(e)}")
             
@@ -54,7 +61,10 @@ class CompletionsWrapper:
             
             raise
 
-def wrap_client(openai_client: Any, project_name: str = "My Project", task_name: str = "My Agent") -> Any:
+def sentinel_openai_client(
+    openai_client: Any, 
+    run_id: UUID,
+) -> Any:
     """
     Wraps an OpenAI client instance with logging capabilities and registers supervisors.
     """
@@ -65,39 +75,39 @@ def wrap_client(openai_client: Any, project_name: str = "My Project", task_name:
         raise ValueError("Invalid OpenAI client: missing chat attribute")
         
     try:
-        # Register project if no project_id exists
-        if not settings.project_id:
-            project_id = register_project(project_name)
-            print(f"Registered new project '{project_name}' with ID: {project_id}")
-
-        # Register task if no task_id exists
-        if not settings.task_id:
-            task_id = register_task(project_id, task_name)
-            print(f"Registered new task '{task_name}' with ID: {task_id}")
-
-        # Register run if no run_id exists
-        if not settings.run_id:
-            run_id = create_run(project_id, task_id)
-            print(f"Registered new run with ID: {run_id}")
-        
-        # Register all supervised functions and their supervisors
-        supervised_functions = registry.get_supervised_functions()
-        for func_name, func_info in supervised_functions.items():
-            print(f"\nInspecting function: {func_name}")
-            
-            # Inspect the supervisors
-            for chain in func_info.supervisors:
-                for supervisor in chain:
-                    print("\nSupervisor Details:")
-                    print(f"Name: {supervisor.name}")
-                    print(f"Source code:\n{inspect.getsource(supervisor.function)}")
-                    print(f"Arguments: {inspect.signature(supervisor.function)}")
-                    
-                    # You can also call the function if needed
-                    # result = supervisor.function("test_action", "test_context")
-                    
         logger = APILogger(settings.api_key)
-        openai_client.chat.completions = CompletionsWrapper(openai_client.chat.completions, logger)
+        openai_client.chat.completions = CompletionsWrapper(
+            openai_client.chat.completions, 
+            logger,
+            run_id
+        )
         return openai_client
     except Exception as e:
         raise RuntimeError(f"Failed to wrap OpenAI client: {str(e)}") from e
+
+def sentinel_init(
+    project_name: str = "My Project", 
+    task_name: str = "My Agent", 
+    run_name: str = "My Run",
+    tools: Optional[List[Callable]] = None
+) -> None:
+    """
+    Initializes supervision for a project, task, and run.
+    """
+
+    project_id = register_project(project_name)
+    print(f"Registered new project '{project_name}' with ID: {project_id}")
+    task_id = register_task(project_id, task_name)
+    print(f"Registered new task '{task_name}' with ID: {task_id}")
+    run_id = create_run(project_id, task_id, run_name)
+    print(f"Registered new run with ID: {run_id}")
+
+    register_tools_and_supervisors(run_id, tools)
+
+    return run_id
+
+def sentinel_end(run_id: UUID) -> None:
+    """
+    Stops supervision for a run.
+    """
+    pass
