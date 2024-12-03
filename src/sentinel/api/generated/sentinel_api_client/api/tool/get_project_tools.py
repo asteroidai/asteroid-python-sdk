@@ -15,7 +15,7 @@ def _get_kwargs(
 ) -> Dict[str, Any]:
     _kwargs: Dict[str, Any] = {
         "method": "get",
-        "url": f"/api/project/{project_id}/tools",
+        "url": f"/project/{project_id}/tools",
     }
 
     return _kwargs

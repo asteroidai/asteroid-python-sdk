@@ -1,37 +1,34 @@
 from typing import TYPE_CHECKING, Any, Dict, List, Type, TypeVar, Union
-from uuid import UUID
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..models.message_role import MessageRole
 from ..models.message_type import MessageType
+from ..models.sentinel_message_role import SentinelMessageRole
 from ..types import UNSET, Unset
 
 if TYPE_CHECKING:
-    from ..models.tool_call import ToolCall
+    from ..models.sentinel_tool_call import SentinelToolCall
 
 
-T = TypeVar("T", bound="Message")
+T = TypeVar("T", bound="SentinelMessage")
 
 
 @_attrs_define
-class Message:
+class SentinelMessage:
     """
     Attributes:
-        role (MessageRole):
+        role (SentinelMessageRole):
         content (str):
-        id (Union[Unset, UUID]):
-        source (Union[Unset, str]):
-        tool_calls (Union[Unset, List['ToolCall']]):
+        sentinel_id (Union[Unset, str]):
+        tool_calls (Union[Unset, List['SentinelToolCall']]):
         type (Union[Unset, MessageType]):
     """
 
-    role: MessageRole
+    role: SentinelMessageRole
     content: str
-    id: Union[Unset, UUID] = UNSET
-    source: Union[Unset, str] = UNSET
-    tool_calls: Union[Unset, List["ToolCall"]] = UNSET
+    sentinel_id: Union[Unset, str] = UNSET
+    tool_calls: Union[Unset, List["SentinelToolCall"]] = UNSET
     type: Union[Unset, MessageType] = UNSET
     additional_properties: Dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -40,11 +37,7 @@ class Message:
 
         content = self.content
 
-        id: Union[Unset, str] = UNSET
-        if not isinstance(self.id, Unset):
-            id = str(self.id)
-
-        source = self.source
+        sentinel_id = self.sentinel_id
 
         tool_calls: Union[Unset, List[Dict[str, Any]]] = UNSET
         if not isinstance(self.tool_calls, Unset):
@@ -65,10 +58,8 @@ class Message:
                 "content": content,
             }
         )
-        if id is not UNSET:
-            field_dict["id"] = id
-        if source is not UNSET:
-            field_dict["source"] = source
+        if sentinel_id is not UNSET:
+            field_dict["sentinel_id"] = sentinel_id
         if tool_calls is not UNSET:
             field_dict["tool_calls"] = tool_calls
         if type is not UNSET:
@@ -78,26 +69,19 @@ class Message:
 
     @classmethod
     def from_dict(cls: Type[T], src_dict: Dict[str, Any]) -> T:
-        from ..models.tool_call import ToolCall
+        from ..models.sentinel_tool_call import SentinelToolCall
 
         d = src_dict.copy()
-        role = MessageRole(d.pop("role"))
+        role = SentinelMessageRole(d.pop("role"))
 
         content = d.pop("content")
 
-        _id = d.pop("id", UNSET)
-        id: Union[Unset, UUID]
-        if isinstance(_id, Unset):
-            id = UNSET
-        else:
-            id = UUID(_id)
-
-        source = d.pop("source", UNSET)
+        sentinel_id = d.pop("sentinel_id", UNSET)
 
         tool_calls = []
         _tool_calls = d.pop("tool_calls", UNSET)
         for tool_calls_item_data in _tool_calls or []:
-            tool_calls_item = ToolCall.from_dict(tool_calls_item_data)
+            tool_calls_item = SentinelToolCall.from_dict(tool_calls_item_data)
 
             tool_calls.append(tool_calls_item)
 
@@ -108,17 +92,16 @@ class Message:
         else:
             type = MessageType(_type)
 
-        message = cls(
+        sentinel_message = cls(
             role=role,
             content=content,
-            id=id,
-            source=source,
+            sentinel_id=sentinel_id,
             tool_calls=tool_calls,
             type=type,
         )
 
-        message.additional_properties = d
-        return message
+        sentinel_message.additional_properties = d
+        return sentinel_message
 
     @property
     def additional_keys(self) -> List[str]:

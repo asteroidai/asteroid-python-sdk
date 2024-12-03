@@ -13,7 +13,7 @@ from ...types import Response
 def _get_kwargs() -> Dict[str, Any]:
     _kwargs: Dict[str, Any] = {
         "method": "get",
-        "url": "/api/stats",
+        "url": "/stats",
     }
 
     return _kwargs

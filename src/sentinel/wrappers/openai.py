@@ -25,9 +25,6 @@ class CompletionsWrapper:
         self.run_id = run_id
     
     def create(self, *args, **kwargs) -> Any:
-        # Extract or generate conversation ID
-        conversation_id = kwargs.pop('conversation_id', str(uuid4()))
-
         # Log the entire request payload
         try:
             self.logger.log_request(kwargs, self.run_id)
@@ -37,29 +34,20 @@ class CompletionsWrapper:
         try:
             # Make API call
             response = self._completions.create(*args, **kwargs)
-            
+
             # Log the entire response
             try:
-                response_data = response if isinstance(response, dict) else response.dict()
-                self.logger.log_response(response_data, self.run_id)
+                self.logger.log_response(response, kwargs, self.run_id)
             except Exception as e:
                 print(f"Warning: Failed to log response: {str(e)}")
             
             return response
             
         except OpenAIError as e:
-            # Log the error
             try:
-                error_data = {
-                    "error": str(e),
-                    "error_type": e.__class__.__name__,
-                    "request": kwargs
-                }
-                self.logger.log_response(error_data, conversation_id)
+                raise e
             except SentinelLoggingError:
-                pass
-            
-            raise
+                raise e
 
 def sentinel_openai_client(
     openai_client: Any, 

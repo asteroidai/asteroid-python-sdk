@@ -11,7 +11,7 @@ from ...types import Response
 def _get_kwargs() -> Dict[str, Any]:
     _kwargs: Dict[str, Any] = {
         "method": "get",
-        "url": "/api/openapi.yaml",
+        "url": "/openapi.yaml",
     }
 
     return _kwargs

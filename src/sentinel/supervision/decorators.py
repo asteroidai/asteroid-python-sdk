@@ -25,18 +25,24 @@ def supervise(
     Decorator that supervises a function.
     
     Args:
-        mock_policy (Optional[MockPolicy]): Mock policy to use. Defaults to None.
-        mock_responses (Optional[List[Any]]): Mock responses to use. Defaults to None.
+        mock_policy           (Optional[MockPolicy]): Mock policy to use. Defaults to None.
+        mock_responses        (Optional[List[Any]]): Mock responses to use. Defaults to None.
         supervision_functions (Optional[List[List[Callable]]]): Supervision functions to use. Defaults to None.
-        ignored_attributes (Optional[List[str]]): Ignored attributes. Defaults to None.
+        ignored_attributes    (Optional[List[str]]): Ignored attributes. Defaults to None.
     """
-    if supervision_functions and len(supervision_functions) == 1 and isinstance(supervision_functions[0], list):
+    if (
+        supervision_functions 
+        and len(supervision_functions) == 1 
+        and isinstance(supervision_functions[0], list)
+    ):
         supervision_functions = [supervision_functions[0]]
 
     def decorator(func):
         # Register the supervised function in SupervisionConfig's pending functions
         supervision_config.register_pending_supervised_function(
-            func, supervision_functions, ignored_attributes
+            func, 
+            supervision_functions, 
+            ignored_attributes
         )
 
         @wraps(func)
@@ -95,7 +101,12 @@ def supervise(
                 supervisors = supervisor_chain.supervisors
                 supervisor_chain_id = supervisor_chain.chain_id
                 for position_in_chain, supervisor in enumerate(supervisors):
-                    supervision_request_id = send_supervision_request(supervisor_chain_id=supervisor_chain_id, supervisor_id=supervisor.id, request_group_id=tool_request_group.id, position_in_chain=position_in_chain)
+                    supervision_request_id = send_supervision_request(
+                        supervisor_chain_id=supervisor_chain_id, 
+                        supervisor_id=supervisor.id, 
+                        request_group_id=tool_request_group.id, 
+                        position_in_chain=position_in_chain
+                    )
 
                     decision = None
                     supervisor_func = supervision_context.get_supervisor_by_id(supervisor.id)
@@ -104,7 +115,16 @@ def supervise(
                         return None  # Continue to next supervisor
 
                     # Execute supervisor function
-                    decision = call_supervisor_function(supervisor_func, func, supervision_context, supervision_request_id=supervision_request_id, ignored_attributes=ignored_attributes, tool_args=tool_args, tool_kwargs=tool_kwargs, decision=decision)
+                    decision = call_supervisor_function(
+                        supervisor_func, 
+                        func, 
+                        supervision_context, 
+                        supervision_request_id=supervision_request_id, 
+                        ignored_attributes=ignored_attributes, 
+                        tool_args=tool_args, 
+                        tool_kwargs=tool_kwargs, 
+                        decision=decision
+                    )
                     chain_decisions.append(decision)
                     print(f"Supervisor decision: {decision.decision}")
 
@@ -153,7 +173,10 @@ def supervise(
                                 "This is not a message from the user but from a supervisor system that is helping the agent to improve its behavior. You should try different action using the feedback!")
 
             # Check decisions and apply modifications if any
-            if all(decision.decision in [SupervisionDecisionType.APPROVE, SupervisionDecisionType.MODIFY] for decision in all_decisions):
+            if all(
+                decision.decision in [SupervisionDecisionType.APPROVE, SupervisionDecisionType.MODIFY] 
+                for decision in all_decisions
+            ):
                 print("All decisions approved or modified.")
                 # Start with original arguments
                 final_args = list(tool_args)

@@ -20,7 +20,7 @@ def _get_kwargs(
 
     _kwargs: Dict[str, Any] = {
         "method": "post",
-        "url": f"/api/tool/{tool_id}/request_group",
+        "url": f"/tool/{tool_id}/request_group",
     }
 
     _body = body.to_dict()

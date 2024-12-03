@@ -1,8 +1,7 @@
 README.md
 pyproject.toml
 src/sentinel/__init__.py
-src/sentinel/config.py
-src/sentinel/logger.py
+src/sentinel/settings.py
 src/sentinel.egg-info/PKG-INFO
 src/sentinel.egg-info/SOURCES.txt
 src/sentinel.egg-info/dependency_links.txt

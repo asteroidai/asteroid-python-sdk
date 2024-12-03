@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "sentinel-api-client"
-version = "1.0.0"
+version = "v1.0.0"
 description = "A client library for accessing Sentinel API"
 authors = []
 readme = "README.md"

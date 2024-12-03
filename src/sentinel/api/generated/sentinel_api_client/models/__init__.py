@@ -5,8 +5,6 @@ from .chain_execution import ChainExecution
 from .chain_execution_state import ChainExecutionState
 from .chain_request import ChainRequest
 from .choice import Choice
-from .create_new_chat_completion_request_body import CreateNewChatCompletionRequestBody
-from .create_new_chat_completion_response_body import CreateNewChatCompletionResponseBody
 from .create_project_body import CreateProjectBody
 from .create_run_tool_body import CreateRunToolBody
 from .create_run_tool_body_attributes import CreateRunToolBodyAttributes
@@ -24,6 +22,13 @@ from .project import Project
 from .review_payload import ReviewPayload
 from .run import Run
 from .run_execution import RunExecution
+from .sentinel_chat import SentinelChat
+from .sentinel_choice import SentinelChoice
+from .sentinel_choice_finish_reason_type_1 import SentinelChoiceFinishReasonType1
+from .sentinel_message import SentinelMessage
+from .sentinel_message_role import SentinelMessageRole
+from .sentinel_tool_call import SentinelToolCall
+from .sentinel_tool_call_type import SentinelToolCallType
 from .status import Status
 from .supervision_request import SupervisionRequest
 from .supervision_request_state import SupervisionRequestState
@@ -53,8 +58,6 @@ __all__ = (
     "ChainExecutionState",
     "ChainRequest",
     "Choice",
-    "CreateNewChatCompletionRequestBody",
-    "CreateNewChatCompletionResponseBody",
     "CreateProjectBody",
     "CreateRunToolBody",
     "CreateRunToolBodyAttributes",
@@ -72,6 +75,13 @@ __all__ = (
     "ReviewPayload",
     "Run",
     "RunExecution",
+    "SentinelChat",
+    "SentinelChoice",
+    "SentinelChoiceFinishReasonType1",
+    "SentinelMessage",
+    "SentinelMessageRole",
+    "SentinelToolCall",
+    "SentinelToolCallType",
     "Status",
     "SupervisionRequest",
     "SupervisionRequestState",

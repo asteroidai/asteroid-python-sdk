@@ -6,21 +6,21 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.create_new_chat_completion_response_body import CreateNewChatCompletionResponseBody
 from ...models.error_response import ErrorResponse
+from ...models.sentinel_chat import SentinelChat
 from ...types import Response
 
 
 def _get_kwargs(
     run_id: UUID,
     *,
-    body: CreateNewChatCompletionResponseBody,
+    body: SentinelChat,
 ) -> Dict[str, Any]:
     headers: Dict[str, Any] = {}
 
     _kwargs: Dict[str, Any] = {
         "method": "post",
-        "url": f"/api/run/{run_id}/new_chat_completion_response",
+        "url": f"/run/{run_id}/chat",
     }
 
     _body = body.to_dict()
@@ -43,6 +43,10 @@ def _parse_response(
         response_400 = ErrorResponse.from_dict(response.json())
 
         return response_400
+    if response.status_code == 404:
+        response_404 = ErrorResponse.from_dict(response.json())
+
+        return response_404
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
     else:
@@ -64,13 +68,14 @@ def sync_detailed(
     run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: CreateNewChatCompletionResponseBody,
+    body: SentinelChat,
 ) -> Response[Union[ErrorResponse, UUID]]:
-    """Create a new chat completion response from an existing run
+    """Create a new chat completion request from an existing run
 
     Args:
         run_id (UUID):
-        body (CreateNewChatCompletionResponseBody):
+        body (SentinelChat): The raw b64 encoded JSON of the request and response data
+            sent/received from the LLM.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -96,13 +101,14 @@ def sync(
     run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: CreateNewChatCompletionResponseBody,
+    body: SentinelChat,
 ) -> Optional[Union[ErrorResponse, UUID]]:
-    """Create a new chat completion response from an existing run
+    """Create a new chat completion request from an existing run
 
     Args:
         run_id (UUID):
-        body (CreateNewChatCompletionResponseBody):
+        body (SentinelChat): The raw b64 encoded JSON of the request and response data
+            sent/received from the LLM.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -123,13 +129,14 @@ async def asyncio_detailed(
     run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: CreateNewChatCompletionResponseBody,
+    body: SentinelChat,
 ) -> Response[Union[ErrorResponse, UUID]]:
-    """Create a new chat completion response from an existing run
+    """Create a new chat completion request from an existing run
 
     Args:
         run_id (UUID):
-        body (CreateNewChatCompletionResponseBody):
+        body (SentinelChat): The raw b64 encoded JSON of the request and response data
+            sent/received from the LLM.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -153,13 +160,14 @@ async def asyncio(
     run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: CreateNewChatCompletionResponseBody,
+    body: SentinelChat,
 ) -> Optional[Union[ErrorResponse, UUID]]:
-    """Create a new chat completion response from an existing run
+    """Create a new chat completion request from an existing run
 
     Args:
         run_id (UUID):
-        body (CreateNewChatCompletionResponseBody):
+        body (SentinelChat): The raw b64 encoded JSON of the request and response data
+            sent/received from the LLM.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
