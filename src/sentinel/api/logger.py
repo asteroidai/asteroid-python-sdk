@@ -38,7 +38,9 @@ class APILogger:
         try:
             # Debug Step 1: Print raw input data
             print("\n=== Debug Step 1: Raw Input ===")
+            print(f"Raw response_data type: {type(response_data)}")
             print(f"Raw response_data: {response_data}")
+            print(f"Raw request_data type: {type(request_data)}")
             print(f"Raw request_data: {request_data}")
             
             # Debug Step 2: JSON Conversion
@@ -46,70 +48,108 @@ class APILogger:
             try:
                 # Use OpenAI's built-in serialization method
                 if hasattr(response_data, 'model_dump_json'):
+                    print("Using model_dump_json()")
                     response_data_str = response_data.model_dump_json()
                 elif hasattr(response_data, 'to_dict'):
+                    print("Using to_dict()")
                     response_data_str = json.dumps(response_data.to_dict())
                 else:
+                    print("Using direct json.dumps()")
                     response_data_str = json.dumps(response_data)
                     
+                print(f"Response JSON string type: {type(response_data_str)}")
                 print(f"Response JSON string: {response_data_str}")
-                request_data_str = json.dumps(request_data)
+                
+                if isinstance(request_data, str):
+                    request_data_str = request_data
+                else:
+                    request_data_str = json.dumps(request_data)
+                print(f"Request JSON string type: {type(request_data_str)}")
                 print(f"Request JSON string: {request_data_str}")
             except Exception as e:
                 print(f"JSON conversion error: {str(e)}")
+                print(f"Error occurred at line {e.__traceback__.tb_lineno}")
+                raise
                 
             # Debug Step 3: Base64 Encoding
             print("\n=== Debug Step 3: Base64 Encoding ===")
             try:
+                if not isinstance(response_data_str, str):
+                    print(f"Warning: response_data_str is not a string, it's a {type(response_data_str)}")
+                    response_data_str = str(response_data_str)
+                
                 response_data_base64 = base64.b64encode(response_data_str.encode()).decode()
+                print(f"Response base64 type: {type(response_data_base64)}")
                 print(f"Response base64: {response_data_base64}")
+                
                 request_data_base64 = base64.b64encode(request_data_str.encode()).decode()
+                print(f"Request base64 type: {type(request_data_base64)}")
                 print(f"Request base64: {request_data_base64}")
             except Exception as e:
                 print(f"Base64 encoding error: {str(e)}")
+                print(f"Error occurred at line {e.__traceback__.tb_lineno}")
+                raise
             
-            # Debug Step 4: Print Final Payload
+            # Debug Step 4: Create and Print Final Payload
             print("\n=== Debug Step 4: Final Payload ===")
-            body = SentinelChat(
-                response_data=response_data_base64,
-                request_data=request_data_base64
-            )
-            print(f"Final body object: {body}")
-            
-            # Send the request
-            response = create_new_chat_sync_detailed(
-                client=self.client,
-                run_id=run_id,
-                body=body
-            )
-            if (
-                response.status_code in [200, 201]
-                and response.parsed is not None
-            ):
-                print(f"Logged response for run {run_id}")
-                print(response.parsed)
-            else:
-                raise ValueError(f"Failed to log LLM response. Response: {response}") 
+            try:
+                body = SentinelChat(
+                    response_data=response_data_base64,
+                    request_data=request_data_base64
+                )
+                print(f"Final body object type: {type(body)}")
+                print(f"Final body object: {body}")
+            except Exception as e:
+                print(f"Body creation error: {str(e)}")
+                print(f"Error occurred at line {e.__traceback__.tb_lineno}")
+                raise
 
-            # Response contains all the tool calls
-            
+            # Send the request with error handling
+            try:
+                print("\n=== Debug Step 5: API Request ===")
+                print(f"Sending request to Sentinel API with body: {body}")
+                response = create_new_chat_sync_detailed(
+                    client=self.client,
+                    run_id=run_id,
+                    body=body
+                )
+                print(f"API Response status code: {response.status_code}")
+                print(f"API Response content: {response.content}")
+                
+                if response.status_code not in [200, 201]:
+                    raise ValueError(f"Failed to log LLM response. Status code: {response.status_code}, Response: {response.content}")
+                
+                if response.parsed is None:
+                    raise ValueError("Response was successful but parsed content is None")
+                    
+                print(f"Successfully logged response for run {run_id}")
+                print(f"Parsed response: {response.parsed}")
+                
+            except Exception as e:
+                print(f"API request error: {str(e)}")
+                print(f"Error occurred at line {e.__traceback__.tb_lineno}")
+                raise
+
+            # Check if there are any tool calls before processing
+            tool_calls = response_data.get('choices', [{}])[0].get('message', {}).get('tool_calls')
+            if not tool_calls:
+                print("No tool calls found in response, skipping supervision checks")
+                return
+
             # Get the run by the ID
             supervision_config = get_supervision_config()
             run = supervision_config.get_run_by_id(run_id)
-            if run:
-                print(f"Run: {run}")
-            else:
+            if not run:
                 print(f"Run not found for ID: {run_id}")
                 return
             
             supervision_context = run.supervision_context
-            
             client = self.client
 
             # Iterate over all the tool calls
             # Get the supervisors for that tool
             # Run each supervisor 
-            for tool_call in response_data['tool_calls']:
+            for tool_call in tool_calls:
                 tool_id = tool_call['tool_id']
                 supervisors_chains = get_supervisor_chains_for_tool(tool_id, client)
                 
@@ -208,11 +248,12 @@ class APILogger:
                 
                 if final_error_message:
                     return final_error_message
-
-            
-            
         except Exception as e:
-            raise SentinelLoggingError(f"Failed to log response: {str(e)}") from e 
+            print(f"\n=== ERROR DETAILS ===")
+            print(f"Error type: {type(e)}")
+            print(f"Error message: {str(e)}")
+            print(f"Error occurred at line {e.__traceback__.tb_lineno}")
+            raise SentinelLoggingError(f"Failed to log response: {str(e)}") from e
 
     def handle_supervision_decision(
         self,

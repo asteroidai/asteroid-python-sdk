@@ -4,7 +4,9 @@ from .arguments import Arguments
 from .chain_execution import ChainExecution
 from .chain_execution_state import ChainExecutionState
 from .chain_request import ChainRequest
+from .chat_ids import ChatIds
 from .choice import Choice
+from .choice_ids import ChoiceIds
 from .create_project_body import CreateProjectBody
 from .create_run_tool_body import CreateRunToolBody
 from .create_run_tool_body_attributes import CreateRunToolBodyAttributes
@@ -57,7 +59,9 @@ __all__ = (
     "ChainExecution",
     "ChainExecutionState",
     "ChainRequest",
+    "ChatIds",
     "Choice",
+    "ChoiceIds",
     "CreateProjectBody",
     "CreateRunToolBody",
     "CreateRunToolBodyAttributes",

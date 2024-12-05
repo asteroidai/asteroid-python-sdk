@@ -6,6 +6,7 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...models.chat_ids import ChatIds
 from ...models.error_response import ErrorResponse
 from ...models.sentinel_chat import SentinelChat
 from ...types import Response
@@ -34,9 +35,9 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[Union[ErrorResponse, UUID]]:
+) -> Optional[Union[ChatIds, ErrorResponse]]:
     if response.status_code == 200:
-        response_200 = UUID(response.json())
+        response_200 = ChatIds.from_dict(response.json())
 
         return response_200
     if response.status_code == 400:
@@ -55,7 +56,7 @@ def _parse_response(
 
 def _build_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[Union[ErrorResponse, UUID]]:
+) -> Response[Union[ChatIds, ErrorResponse]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -69,7 +70,7 @@ def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
     body: SentinelChat,
-) -> Response[Union[ErrorResponse, UUID]]:
+) -> Response[Union[ChatIds, ErrorResponse]]:
     """Create a new chat completion request from an existing run
 
     Args:
@@ -82,7 +83,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[ErrorResponse, UUID]]
+        Response[Union[ChatIds, ErrorResponse]]
     """
 
     kwargs = _get_kwargs(
@@ -102,7 +103,7 @@ def sync(
     *,
     client: Union[AuthenticatedClient, Client],
     body: SentinelChat,
-) -> Optional[Union[ErrorResponse, UUID]]:
+) -> Optional[Union[ChatIds, ErrorResponse]]:
     """Create a new chat completion request from an existing run
 
     Args:
@@ -115,7 +116,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[ErrorResponse, UUID]
+        Union[ChatIds, ErrorResponse]
     """
 
     return sync_detailed(
@@ -130,7 +131,7 @@ async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
     body: SentinelChat,
-) -> Response[Union[ErrorResponse, UUID]]:
+) -> Response[Union[ChatIds, ErrorResponse]]:
     """Create a new chat completion request from an existing run
 
     Args:
@@ -143,7 +144,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[ErrorResponse, UUID]]
+        Response[Union[ChatIds, ErrorResponse]]
     """
 
     kwargs = _get_kwargs(
@@ -161,7 +162,7 @@ async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
     body: SentinelChat,
-) -> Optional[Union[ErrorResponse, UUID]]:
+) -> Optional[Union[ChatIds, ErrorResponse]]:
     """Create a new chat completion request from an existing run
 
     Args:
@@ -174,7 +175,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[ErrorResponse, UUID]
+        Union[ChatIds, ErrorResponse]
     """
 
     return (
