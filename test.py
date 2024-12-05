@@ -110,3 +110,20 @@ for i in range(1):
     # print(response)
 
 
+
+
+# Bring your favourite LLM client
+client = OpenAI()
+
+# Initialize Sentinel
+run_id = sentinel_init()
+
+# Wrap your client
+client = sentinel_openai_client(client, run_id)
+
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"content":[{"text":"What's the weather in Tokyo?","type":"text"}],"role":"user"}],
+)
+
+

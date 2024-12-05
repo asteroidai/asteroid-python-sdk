@@ -29,32 +29,52 @@ class APILogger:
     def log_response(self, response_data: Dict[str, Any], request_data: Dict[str, Any], run_id: UUID) -> None:
         """Send the raw response data to Sentinel API"""
         try:
-            # Base 64 encode the response data
-            # Print the type of the response data
-            print(f"Response data type: {type(response_data)}")
-            response_data_str = json.dumps(response_data)
-            response_data_base64 = base64.b64encode(response_data_str.encode()).decode()
-
-            # Base 64 encode the request data
-            print(f"Request data type: {type(request_data)}")
-            request_data_str = json.dumps(request_data)
-            request_data_base64 = base64.b64encode(request_data_str.encode()).decode()
+            # Debug Step 1: Print raw input data
+            print("\n=== Debug Step 1: Raw Input ===")
+            print(f"Raw response_data: {response_data}")
+            print(f"Raw request_data: {request_data}")
             
+            # Debug Step 2: JSON Conversion
+            print("\n=== Debug Step 2: JSON Conversion ===")
+            try:
+                # Use OpenAI's built-in serialization method
+                if hasattr(response_data, 'model_dump_json'):
+                    response_data_str = response_data.model_dump_json()
+                elif hasattr(response_data, 'to_dict'):
+                    response_data_str = json.dumps(response_data.to_dict())
+                else:
+                    response_data_str = json.dumps(response_data)
+                    
+                print(f"Response JSON string: {response_data_str}")
+                request_data_str = json.dumps(request_data)
+                print(f"Request JSON string: {request_data_str}")
+            except Exception as e:
+                print(f"JSON conversion error: {str(e)}")
+                
+            # Debug Step 3: Base64 Encoding
+            print("\n=== Debug Step 3: Base64 Encoding ===")
+            try:
+                response_data_base64 = base64.b64encode(response_data_str.encode()).decode()
+                print(f"Response base64: {response_data_base64}")
+                request_data_base64 = base64.b64encode(request_data_str.encode()).decode()
+                print(f"Request base64: {request_data_base64}")
+            except Exception as e:
+                print(f"Base64 encoding error: {str(e)}")
+            
+            # Debug Step 4: Print Final Payload
+            print("\n=== Debug Step 4: Final Payload ===")
             body = SentinelChat(
                 response_data=response_data_base64,
                 request_data=request_data_base64
             )
-
+            print(f"Final body object: {body}")
+            
+            # Send the request
             response = create_new_chat_sync_detailed(
                 client=self.client,
                 run_id=run_id,
                 body=body
             )
-
-            # Response contains all the tool calls
-            # Iterate over all the tool calls
-            # Get the supervisors for that tool
-            # Run each supervisor 
             
             if (
                 response.status_code in [200, 201]
@@ -62,6 +82,9 @@ class APILogger:
             ):
                 print(f"Logged response for run {run_id}")
             else:
-                raise ValueError(f"Failed to log LLM response. Response: {response}") 
+                print(f"\n=== Error Response ===")
+                print(f"Status Code: {response.status_code}")
+                print(f"Response Content: {response.content}")
+                raise ValueError(f"Failed to log LLM response. Response: {response}")
         except Exception as e:
-            raise SentinelLoggingError(f"Failed to log response: {str(e)}") from e 
+            raise SentinelLoggingError(f"Failed to log response: {str(e)}") from e
