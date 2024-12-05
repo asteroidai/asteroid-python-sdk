@@ -26,6 +26,12 @@ print(response)
 
 This SDK makes use of a generated client from the OpenAPI spec. To update the spec, run the following command from the root of the repo (assuming that the OpenAPI spec is in the ../sentinel/server directory):
 
+First, install the openapi-python-client package https://github.com/openapi-generators/openapi-python-client
+```bash
+pip install openapi-python-client
+```
+
+Then, generate the client:
 ```bash
 openapi-python-client generate --path ../sentinel/server/openapi.yaml  --output-path src/sentinel/api/generated --overwrite
 ```
