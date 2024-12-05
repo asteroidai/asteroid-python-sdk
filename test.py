@@ -97,7 +97,7 @@ for i in range(1):
 
     response = wrapped_client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"content":[{"text":"What's the weather in Tokyo?","type":"text"}],"role":"user"}],
+        messages=[{"content":[{"text":"What's the weather in Tokyo please use the get_weather tool?","type":"text"}],"role":"user"}],
         tools=tools,
         tool_choice="auto",
         temperature=1.5,
@@ -105,7 +105,7 @@ for i in range(1):
     )
 
     for choice in response.choices:
-        print(choice.message.content)
+        print(choice.message.tool_calls)
         # print(choice.message.tool_calls)
     # print(response)
 

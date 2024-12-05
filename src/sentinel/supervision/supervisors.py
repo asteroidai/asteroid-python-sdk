@@ -1,4 +1,6 @@
 from typing import Callable, Optional, Protocol, Any
+
+from sentinel.api.generated.sentinel_api_client.models.tool import Tool
 from .config import (
     SupervisionDecision,
     SupervisionDecisionType,
@@ -77,7 +79,7 @@ ModifiedData:
 """
 
     def supervisor(
-        func: Callable,
+        tool: Tool,
         supervision_context: SupervisionContext,
         ignored_attributes: list[str],
         tool_args: list[Any],
@@ -88,19 +90,6 @@ ModifiedData:
         """
         LLM supervisor that makes a decision based on the function call, its arguments, and the supervision instructions.
         """
-        # Extract function details
-        func_name = func.__qualname__
-        func_description = str(func.__doc__) or "No description available."
-        try:
-            source_lines, _ = inspect.getsourcelines(func)
-            # Remove decorator lines before the function definition
-            func_def_index = next(
-                i for i, line in enumerate(source_lines) if line.lstrip().startswith('def ')
-            )
-            func_implementation = ''.join(source_lines[func_def_index:])
-        except (OSError, StopIteration):
-            func_implementation = "Source code not available."
-            
         # Prepare tool arguments string
         tool_args_str = ", ".join([f"{i}: {repr(arg)}" for i, arg in enumerate(tool_args)])
         tool_kwargs_str = ", ".join(
@@ -134,13 +123,13 @@ This is the conversation between the AI customer support assistant and the custo
 The AI agent is attempting to call the following function:
 
 Function Name:
-{func_name}
+{tool.name}
 
 Function Description:
-{func_description}
+{tool.description}
 
 Function Implementation:
-{func_implementation}
+
 
 Arguments Passed to the Function:
 {arguments_str}

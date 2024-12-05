@@ -22,6 +22,8 @@ from sentinel.api.generated.sentinel_api_client.api.run.create_run import sync_d
 from sentinel.api.generated.sentinel_api_client.api.supervisor.create_supervisor import sync_detailed as create_supervisor_sync_detailed
 from sentinel.api.generated.sentinel_api_client.api.supervisor.create_tool_supervisor_chains import sync_detailed as create_tool_supervisor_chains_sync_detailed
 from sentinel.api.generated.sentinel_api_client.models.supervisor import Supervisor
+from sentinel.api.generated.sentinel_api_client.models.supervisor_chain import SupervisorChain
+from sentinel.api.generated.sentinel_api_client.api.supervisor.get_tool_supervisor_chains import sync_detailed as get_tool_supervisor_chains_sync_detailed
 
 from sentinel.supervision.config import SupervisionContext, get_supervision_config
 from sentinel.supervision.supervisors import auto_approve_supervisor
@@ -350,3 +352,23 @@ def register_supervisor(client: Client, supervisor_info: dict, project_id: UUID,
     else:
         raise Exception(f"Failed to register supervisor '{supervisor_info['name']}'. Response: {supervisor_response}")
     
+def get_supervisor_chains_for_tool(tool_id: UUID, client: Client) -> List[SupervisorChain]:
+    """
+    Retrieve the supervisor chains for a specific tool.
+    """
+    
+    supervisors_list: List[SupervisorChain] = []
+    try:
+        supervisors_response = get_tool_supervisor_chains_sync_detailed(
+            tool_id=tool_id,
+            client=client,
+        )
+        if supervisors_response is not None and supervisors_response.parsed is not None:
+            supervisors_list = supervisors_response.parsed  # List[SupervisorChain]
+            print(f"Retrieved {len(supervisors_list)} supervisor chains from the API.")
+        else:
+            print("No supervisors found for this tool and run.")
+    except Exception as e:
+        print(f"Error retrieving supervisors: {e}")
+    
+    return supervisors_list

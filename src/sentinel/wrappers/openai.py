@@ -37,7 +37,9 @@ class CompletionsWrapper:
 
             # Log the entire response
             try:
-                self.logger.log_response(response, kwargs, self.run_id)
+                response_data = response if isinstance(response, dict) else response.dict()
+                request_data = kwargs
+                self.logger.log_response(response_data, request_data, self.run_id)
             except Exception as e:
                 print(f"Warning: Failed to log response: {str(e)}")
             
