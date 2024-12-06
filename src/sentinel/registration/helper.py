@@ -264,7 +264,8 @@ def register_tools_and_supervisors(run_id: UUID, tools: Optional[List[Callable |
             tool_response.parsed is not None
         ):
             # Update the tool_id in the registry 
-            tool_id = tool_response.parsed
+            tool = tool_response.parsed
+            tool_id = tool.id
             supervision_context.update_tool_id(func, tool_id)
             print(f"Tool '{tool_name}' registered with ID: {tool_id}")
         else:

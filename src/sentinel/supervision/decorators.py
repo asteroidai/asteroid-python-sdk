@@ -2,18 +2,12 @@ import asyncio
 from typing import Any, Callable, List, Optional
 from functools import wraps
 
-from .config import supervision_config, SupervisionDecisionType, SupervisionDecision
+from .config import supervision_config, SupervisionDecision
 from ..mocking.policies import MockPolicy
 from ..utils.utils import create_random_value
 from .llm_sampling import sample_from_llm
 import random
 from uuid import UUID
-from sentinel.api.generated.sentinel_api_client.models.supervisor_type import SupervisorType
-from sentinel.api.generated.sentinel_api_client.models.tool_request import ToolRequest
-from sentinel.api.generated.sentinel_api_client.models.arguments import Arguments
-from sentinel.api.generated.sentinel_api_client.models.message import Message
-from sentinel.api.generated.sentinel_api_client.models.task_state import TaskState
-from sentinel.api.generated.sentinel_api_client.models.tool_request_group import ToolRequestGroup
 
 def supervise(
     mock_policy: Optional[MockPolicy] = None,

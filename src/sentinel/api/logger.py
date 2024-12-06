@@ -150,7 +150,7 @@ class APILogger:
             # Get the supervisors for that tool
             # Run each supervisor 
             for tool_call in tool_calls:
-                tool_id = tool_call['tool_id']
+                tool_id = tool_call['id']
                 supervisors_chains = get_supervisor_chains_for_tool(tool_id, client)
                 
                 tool_code = None
