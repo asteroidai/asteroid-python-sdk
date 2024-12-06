@@ -1,13 +1,15 @@
-from typing import TYPE_CHECKING, Any, Dict, List, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Dict, List, Type, TypeVar, Union
 from uuid import UUID
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
+from ..types import UNSET, Unset
+
 if TYPE_CHECKING:
     from ..models.chain_execution_state import ChainExecutionState
     from ..models.supervision_request import SupervisionRequest
-    from ..models.tool_request_group import ToolRequestGroup
+    from ..models.tool_call import ToolCall
 
 
 T = TypeVar("T", bound="ReviewPayload")
@@ -20,14 +22,14 @@ class ReviewPayload:
     Attributes:
         supervision_request (SupervisionRequest):
         chain_state (ChainExecutionState):
-        request_group (ToolRequestGroup):
         run_id (UUID): The ID of the run this review is for
+        toolcall (Union[Unset, ToolCall]):
     """
 
     supervision_request: "SupervisionRequest"
     chain_state: "ChainExecutionState"
-    request_group: "ToolRequestGroup"
     run_id: UUID
+    toolcall: Union[Unset, "ToolCall"] = UNSET
     additional_properties: Dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -35,9 +37,11 @@ class ReviewPayload:
 
         chain_state = self.chain_state.to_dict()
 
-        request_group = self.request_group.to_dict()
-
         run_id = str(self.run_id)
+
+        toolcall: Union[Unset, Dict[str, Any]] = UNSET
+        if not isinstance(self.toolcall, Unset):
+            toolcall = self.toolcall.to_dict()
 
         field_dict: Dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -45,10 +49,11 @@ class ReviewPayload:
             {
                 "supervision_request": supervision_request,
                 "chain_state": chain_state,
-                "request_group": request_group,
                 "run_id": run_id,
             }
         )
+        if toolcall is not UNSET:
+            field_dict["toolcall"] = toolcall
 
         return field_dict
 
@@ -56,22 +61,27 @@ class ReviewPayload:
     def from_dict(cls: Type[T], src_dict: Dict[str, Any]) -> T:
         from ..models.chain_execution_state import ChainExecutionState
         from ..models.supervision_request import SupervisionRequest
-        from ..models.tool_request_group import ToolRequestGroup
+        from ..models.tool_call import ToolCall
 
         d = src_dict.copy()
         supervision_request = SupervisionRequest.from_dict(d.pop("supervision_request"))
 
         chain_state = ChainExecutionState.from_dict(d.pop("chain_state"))
 
-        request_group = ToolRequestGroup.from_dict(d.pop("request_group"))
-
         run_id = UUID(d.pop("run_id"))
+
+        _toolcall = d.pop("toolcall", UNSET)
+        toolcall: Union[Unset, ToolCall]
+        if isinstance(_toolcall, Unset):
+            toolcall = UNSET
+        else:
+            toolcall = ToolCall.from_dict(_toolcall)
 
         review_payload = cls(
             supervision_request=supervision_request,
             chain_state=chain_state,
-            request_group=request_group,
             run_id=run_id,
+            toolcall=toolcall,
         )
 
         review_payload.additional_properties = d

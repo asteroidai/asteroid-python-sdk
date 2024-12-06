@@ -12,7 +12,7 @@ from ...types import Response
 
 
 def _get_kwargs(
-    request_group_id: UUID,
+    tool_call_id: UUID,
     chain_id: UUID,
     supervisor_id: UUID,
     *,
@@ -22,7 +22,7 @@ def _get_kwargs(
 
     _kwargs: Dict[str, Any] = {
         "method": "post",
-        "url": f"/api/request_group/{request_group_id}/chain/{chain_id}/supervisor/{supervisor_id}/supervision_request",
+        "url": f"/tool_call/{tool_call_id}/chain/{chain_id}/supervisor/{supervisor_id}/supervision_request",
     }
 
     _body = body.to_dict()
@@ -67,17 +67,17 @@ def _build_response(
 
 
 def sync_detailed(
-    request_group_id: UUID,
+    tool_call_id: UUID,
     chain_id: UUID,
     supervisor_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
     body: SupervisionRequest,
 ) -> Response[Union[ErrorResponse, UUID]]:
-    """Create a supervision request for a supervisor in a chain on a request group
+    """Create a supervision request for a supervisor in a chain on a tool call
 
     Args:
-        request_group_id (UUID):
+        tool_call_id (UUID):
         chain_id (UUID):
         supervisor_id (UUID):
         body (SupervisionRequest):
@@ -91,7 +91,7 @@ def sync_detailed(
     """
 
     kwargs = _get_kwargs(
-        request_group_id=request_group_id,
+        tool_call_id=tool_call_id,
         chain_id=chain_id,
         supervisor_id=supervisor_id,
         body=body,
@@ -105,17 +105,17 @@ def sync_detailed(
 
 
 def sync(
-    request_group_id: UUID,
+    tool_call_id: UUID,
     chain_id: UUID,
     supervisor_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
     body: SupervisionRequest,
 ) -> Optional[Union[ErrorResponse, UUID]]:
-    """Create a supervision request for a supervisor in a chain on a request group
+    """Create a supervision request for a supervisor in a chain on a tool call
 
     Args:
-        request_group_id (UUID):
+        tool_call_id (UUID):
         chain_id (UUID):
         supervisor_id (UUID):
         body (SupervisionRequest):
@@ -129,7 +129,7 @@ def sync(
     """
 
     return sync_detailed(
-        request_group_id=request_group_id,
+        tool_call_id=tool_call_id,
         chain_id=chain_id,
         supervisor_id=supervisor_id,
         client=client,
@@ -138,17 +138,17 @@ def sync(
 
 
 async def asyncio_detailed(
-    request_group_id: UUID,
+    tool_call_id: UUID,
     chain_id: UUID,
     supervisor_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
     body: SupervisionRequest,
 ) -> Response[Union[ErrorResponse, UUID]]:
-    """Create a supervision request for a supervisor in a chain on a request group
+    """Create a supervision request for a supervisor in a chain on a tool call
 
     Args:
-        request_group_id (UUID):
+        tool_call_id (UUID):
         chain_id (UUID):
         supervisor_id (UUID):
         body (SupervisionRequest):
@@ -162,7 +162,7 @@ async def asyncio_detailed(
     """
 
     kwargs = _get_kwargs(
-        request_group_id=request_group_id,
+        tool_call_id=tool_call_id,
         chain_id=chain_id,
         supervisor_id=supervisor_id,
         body=body,
@@ -174,17 +174,17 @@ async def asyncio_detailed(
 
 
 async def asyncio(
-    request_group_id: UUID,
+    tool_call_id: UUID,
     chain_id: UUID,
     supervisor_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
     body: SupervisionRequest,
 ) -> Optional[Union[ErrorResponse, UUID]]:
-    """Create a supervision request for a supervisor in a chain on a request group
+    """Create a supervision request for a supervisor in a chain on a tool call
 
     Args:
-        request_group_id (UUID):
+        tool_call_id (UUID):
         chain_id (UUID):
         supervisor_id (UUID):
         body (SupervisionRequest):
@@ -199,7 +199,7 @@ async def asyncio(
 
     return (
         await asyncio_detailed(
-            request_group_id=request_group_id,
+            tool_call_id=tool_call_id,
             chain_id=chain_id,
             supervisor_id=supervisor_id,
             client=client,

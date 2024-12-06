@@ -14,13 +14,13 @@ class ChainExecution:
     """
     Attributes:
         id (UUID):
-        request_group_id (UUID):
+        toolcall_id (UUID):
         chain_id (UUID):
         created_at (datetime.datetime):
     """
 
     id: UUID
-    request_group_id: UUID
+    toolcall_id: UUID
     chain_id: UUID
     created_at: datetime.datetime
     additional_properties: Dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -28,7 +28,7 @@ class ChainExecution:
     def to_dict(self) -> Dict[str, Any]:
         id = str(self.id)
 
-        request_group_id = str(self.request_group_id)
+        toolcall_id = str(self.toolcall_id)
 
         chain_id = str(self.chain_id)
 
@@ -39,7 +39,7 @@ class ChainExecution:
         field_dict.update(
             {
                 "id": id,
-                "request_group_id": request_group_id,
+                "toolcall_id": toolcall_id,
                 "chain_id": chain_id,
                 "created_at": created_at,
             }
@@ -52,7 +52,7 @@ class ChainExecution:
         d = src_dict.copy()
         id = UUID(d.pop("id"))
 
-        request_group_id = UUID(d.pop("request_group_id"))
+        toolcall_id = UUID(d.pop("toolcall_id"))
 
         chain_id = UUID(d.pop("chain_id"))
 
@@ -60,7 +60,7 @@ class ChainExecution:
 
         chain_execution = cls(
             id=id,
-            request_group_id=request_group_id,
+            toolcall_id=toolcall_id,
             chain_id=chain_id,
             created_at=created_at,
         )

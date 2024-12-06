@@ -7,7 +7,7 @@ from ..models.status import Status
 
 if TYPE_CHECKING:
     from ..models.chain_execution_state import ChainExecutionState
-    from ..models.tool_request_group import ToolRequestGroup
+    from ..models.tool_call import ToolCall
 
 
 T = TypeVar("T", bound="RunExecution")
@@ -17,18 +17,18 @@ T = TypeVar("T", bound="RunExecution")
 class RunExecution:
     """
     Attributes:
-        request_group (ToolRequestGroup):
+        toolcall (ToolCall):
         chains (List['ChainExecutionState']):
         status (Status):
     """
 
-    request_group: "ToolRequestGroup"
+    toolcall: "ToolCall"
     chains: List["ChainExecutionState"]
     status: Status
     additional_properties: Dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
-        request_group = self.request_group.to_dict()
+        toolcall = self.toolcall.to_dict()
 
         chains = []
         for chains_item_data in self.chains:
@@ -41,7 +41,7 @@ class RunExecution:
         field_dict.update(self.additional_properties)
         field_dict.update(
             {
-                "request_group": request_group,
+                "toolcall": toolcall,
                 "chains": chains,
                 "status": status,
             }
@@ -52,10 +52,10 @@ class RunExecution:
     @classmethod
     def from_dict(cls: Type[T], src_dict: Dict[str, Any]) -> T:
         from ..models.chain_execution_state import ChainExecutionState
-        from ..models.tool_request_group import ToolRequestGroup
+        from ..models.tool_call import ToolCall
 
         d = src_dict.copy()
-        request_group = ToolRequestGroup.from_dict(d.pop("request_group"))
+        toolcall = ToolCall.from_dict(d.pop("toolcall"))
 
         chains = []
         _chains = d.pop("chains")
@@ -67,7 +67,7 @@ class RunExecution:
         status = Status(d.pop("status"))
 
         run_execution = cls(
-            request_group=request_group,
+            toolcall=toolcall,
             chains=chains,
             status=status,
         )

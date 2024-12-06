@@ -7,6 +7,7 @@ import httpx
 from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.create_run_tool_body import CreateRunToolBody
+from ...models.tool import Tool
 from ...types import Response
 
 
@@ -31,13 +32,13 @@ def _get_kwargs(
     return _kwargs
 
 
-def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[UUID]:
+def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[Tool]:
     if response.status_code == 200:
-        response_200 = UUID(response.json())
+        response_200 = Tool.from_dict(response.json())
 
         return response_200
     if response.status_code == 201:
-        response_201 = UUID(response.json())
+        response_201 = Tool.from_dict(response.json())
 
         return response_201
     if client.raise_on_unexpected_status:
@@ -46,7 +47,7 @@ def _parse_response(*, client: Union[AuthenticatedClient, Client], response: htt
         return None
 
 
-def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[UUID]:
+def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[Tool]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -60,7 +61,7 @@ def sync_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
     body: CreateRunToolBody,
-) -> Response[UUID]:
+) -> Response[Tool]:
     """Create a new tool for a run
 
     Args:
@@ -72,7 +73,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[UUID]
+        Response[Tool]
     """
 
     kwargs = _get_kwargs(
@@ -92,7 +93,7 @@ def sync(
     *,
     client: Union[AuthenticatedClient, Client],
     body: CreateRunToolBody,
-) -> Optional[UUID]:
+) -> Optional[Tool]:
     """Create a new tool for a run
 
     Args:
@@ -104,7 +105,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        UUID
+        Tool
     """
 
     return sync_detailed(
@@ -119,7 +120,7 @@ async def asyncio_detailed(
     *,
     client: Union[AuthenticatedClient, Client],
     body: CreateRunToolBody,
-) -> Response[UUID]:
+) -> Response[Tool]:
     """Create a new tool for a run
 
     Args:
@@ -131,7 +132,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[UUID]
+        Response[Tool]
     """
 
     kwargs = _get_kwargs(
@@ -149,7 +150,7 @@ async def asyncio(
     *,
     client: Union[AuthenticatedClient, Client],
     body: CreateRunToolBody,
-) -> Optional[UUID]:
+) -> Optional[Tool]:
     """Create a new tool for a run
 
     Args:
@@ -161,7 +162,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        UUID
+        Tool
     """
 
     return (

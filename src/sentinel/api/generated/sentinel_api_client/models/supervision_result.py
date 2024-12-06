@@ -21,7 +21,7 @@ class SupervisionResult:
         decision (Decision):
         reasoning (str):
         id (Union[Unset, UUID]):
-        chosen_toolrequest_id (Union[Unset, UUID]):
+        toolcall_id (Union[Unset, UUID]):
     """
 
     supervision_request_id: UUID
@@ -29,7 +29,7 @@ class SupervisionResult:
     decision: Decision
     reasoning: str
     id: Union[Unset, UUID] = UNSET
-    chosen_toolrequest_id: Union[Unset, UUID] = UNSET
+    toolcall_id: Union[Unset, UUID] = UNSET
     additional_properties: Dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -45,9 +45,9 @@ class SupervisionResult:
         if not isinstance(self.id, Unset):
             id = str(self.id)
 
-        chosen_toolrequest_id: Union[Unset, str] = UNSET
-        if not isinstance(self.chosen_toolrequest_id, Unset):
-            chosen_toolrequest_id = str(self.chosen_toolrequest_id)
+        toolcall_id: Union[Unset, str] = UNSET
+        if not isinstance(self.toolcall_id, Unset):
+            toolcall_id = str(self.toolcall_id)
 
         field_dict: Dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -61,8 +61,8 @@ class SupervisionResult:
         )
         if id is not UNSET:
             field_dict["id"] = id
-        if chosen_toolrequest_id is not UNSET:
-            field_dict["chosen_toolrequest_id"] = chosen_toolrequest_id
+        if toolcall_id is not UNSET:
+            field_dict["toolcall_id"] = toolcall_id
 
         return field_dict
 
@@ -84,12 +84,12 @@ class SupervisionResult:
         else:
             id = UUID(_id)
 
-        _chosen_toolrequest_id = d.pop("chosen_toolrequest_id", UNSET)
-        chosen_toolrequest_id: Union[Unset, UUID]
-        if isinstance(_chosen_toolrequest_id, Unset):
-            chosen_toolrequest_id = UNSET
+        _toolcall_id = d.pop("toolcall_id", UNSET)
+        toolcall_id: Union[Unset, UUID]
+        if isinstance(_toolcall_id, Unset):
+            toolcall_id = UNSET
         else:
-            chosen_toolrequest_id = UUID(_chosen_toolrequest_id)
+            toolcall_id = UUID(_toolcall_id)
 
         supervision_result = cls(
             supervision_request_id=supervision_request_id,
@@ -97,7 +97,7 @@ class SupervisionResult:
             decision=decision,
             reasoning=reasoning,
             id=id,
-            chosen_toolrequest_id=chosen_toolrequest_id,
+            toolcall_id=toolcall_id,
         )
 
         supervision_result.additional_properties = d

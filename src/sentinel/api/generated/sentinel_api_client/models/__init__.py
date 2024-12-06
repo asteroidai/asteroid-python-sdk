@@ -30,7 +30,6 @@ from .sentinel_choice_finish_reason_type_1 import SentinelChoiceFinishReasonType
 from .sentinel_message import SentinelMessage
 from .sentinel_message_role import SentinelMessageRole
 from .sentinel_tool_call import SentinelToolCall
-from .sentinel_tool_call_type import SentinelToolCallType
 from .status import Status
 from .supervision_request import SupervisionRequest
 from .supervision_request_state import SupervisionRequestState
@@ -48,9 +47,8 @@ from .tool import Tool
 from .tool_attributes import ToolAttributes
 from .tool_call import ToolCall
 from .tool_call_arguments import ToolCallArguments
+from .tool_call_ids import ToolCallIds
 from .tool_choice import ToolChoice
-from .tool_request import ToolRequest
-from .tool_request_group import ToolRequestGroup
 from .update_run_result_body import UpdateRunResultBody
 from .usage import Usage
 
@@ -85,7 +83,6 @@ __all__ = (
     "SentinelMessage",
     "SentinelMessageRole",
     "SentinelToolCall",
-    "SentinelToolCallType",
     "Status",
     "SupervisionRequest",
     "SupervisionRequestState",
@@ -103,9 +100,8 @@ __all__ = (
     "ToolAttributes",
     "ToolCall",
     "ToolCallArguments",
+    "ToolCallIds",
     "ToolChoice",
-    "ToolRequest",
-    "ToolRequestGroup",
     "UpdateRunResultBody",
     "Usage",
 )

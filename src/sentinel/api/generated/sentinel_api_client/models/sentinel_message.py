@@ -1,7 +1,9 @@
+import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Type, TypeVar, Union
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
+from dateutil.parser import isoparse
 
 from ..models.message_type import MessageType
 from ..models.sentinel_message_role import SentinelMessageRole
@@ -20,16 +22,18 @@ class SentinelMessage:
     Attributes:
         role (SentinelMessageRole):
         content (str):
-        sentinel_id (Union[Unset, str]):
+        id (Union[Unset, str]):
         tool_calls (Union[Unset, List['SentinelToolCall']]):
         type (Union[Unset, MessageType]):
+        created_at (Union[Unset, datetime.datetime]):
     """
 
     role: SentinelMessageRole
     content: str
-    sentinel_id: Union[Unset, str] = UNSET
+    id: Union[Unset, str] = UNSET
     tool_calls: Union[Unset, List["SentinelToolCall"]] = UNSET
     type: Union[Unset, MessageType] = UNSET
+    created_at: Union[Unset, datetime.datetime] = UNSET
     additional_properties: Dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -37,7 +41,7 @@ class SentinelMessage:
 
         content = self.content
 
-        sentinel_id = self.sentinel_id
+        id = self.id
 
         tool_calls: Union[Unset, List[Dict[str, Any]]] = UNSET
         if not isinstance(self.tool_calls, Unset):
@@ -50,6 +54,10 @@ class SentinelMessage:
         if not isinstance(self.type, Unset):
             type = self.type.value
 
+        created_at: Union[Unset, str] = UNSET
+        if not isinstance(self.created_at, Unset):
+            created_at = self.created_at.isoformat()
+
         field_dict: Dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -58,12 +66,14 @@ class SentinelMessage:
                 "content": content,
             }
         )
-        if sentinel_id is not UNSET:
-            field_dict["sentinel_id"] = sentinel_id
+        if id is not UNSET:
+            field_dict["id"] = id
         if tool_calls is not UNSET:
             field_dict["tool_calls"] = tool_calls
         if type is not UNSET:
             field_dict["type"] = type
+        if created_at is not UNSET:
+            field_dict["created_at"] = created_at
 
         return field_dict
 
@@ -76,7 +86,7 @@ class SentinelMessage:
 
         content = d.pop("content")
 
-        sentinel_id = d.pop("sentinel_id", UNSET)
+        id = d.pop("id", UNSET)
 
         tool_calls = []
         _tool_calls = d.pop("tool_calls", UNSET)
@@ -92,12 +102,20 @@ class SentinelMessage:
         else:
             type = MessageType(_type)
 
+        _created_at = d.pop("created_at", UNSET)
+        created_at: Union[Unset, datetime.datetime]
+        if isinstance(_created_at, Unset):
+            created_at = UNSET
+        else:
+            created_at = isoparse(_created_at)
+
         sentinel_message = cls(
             role=role,
             content=content,
-            sentinel_id=sentinel_id,
+            id=id,
             tool_calls=tool_calls,
             type=type,
+            created_at=created_at,
         )
 
         sentinel_message.additional_properties = d
