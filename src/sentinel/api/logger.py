@@ -63,6 +63,14 @@ class APILogger:
                 if isinstance(request_data, str):
                     request_data_str = request_data
                 else:
+                    # Tool calls need to serialised in case they are Python objects
+                    # TODO: There might be more optimized version for this
+                    messages = request_data.get("messages", [])
+                    if messages:
+                        for idx, message in enumerate(messages):
+                            tool_calls = message.get("tool_calls", [])
+                            if tool_calls:
+                                request_data["messages"][idx]["tool_calls"] = [t.to_dict() for t in tool_calls if type(t) is not dict]
                     request_data_str = json.dumps(request_data)
                 print(f"Request JSON string type: {type(request_data_str)}")
                 print(f"Request JSON string: {request_data_str}")
