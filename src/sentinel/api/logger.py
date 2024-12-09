@@ -7,7 +7,7 @@ import base64
 import json
 from typing import Any, Dict, List, Optional, Callable
 from uuid import UUID
-from sentinel.registration.helper import get_supervisor_chains_for_tool
+from sentinel.registration.helper import get_supervisor_chains_for_tool, send_supervision_request, send_supervision_result
 from sentinel.api.generated.sentinel_api_client.models.supervisor_type import SupervisorType
 from sentinel.api.generated.sentinel_api_client.models.tool import Tool
 from sentinel.settings import settings
@@ -121,9 +121,11 @@ class APILogger:
                 
                 if response.parsed is None:
                     raise ValueError("Response was successful but parsed content is None")
-                    
+                
                 print(f"Successfully logged response for run {run_id}")
                 print(f"Parsed response: {response.parsed}")
+                create_new_chat_response = response.parsed
+                
                 
             except Exception as e:
                 print(f"API request error: {str(e)}")
@@ -131,10 +133,13 @@ class APILogger:
                 raise
 
             # Check if there are any tool calls before processing
-            tool_calls = response_data.get('choices', [{}])[0].get('message', {}).get('tool_calls')
-            if not tool_calls:
+            response_data_tool_calls = response_data.get('choices', [{}])[0].get('message', {}).get('tool_calls')
+            if not response_data_tool_calls:
                 print("No tool calls found in response, skipping supervision checks")
                 return
+            # Get the tool ids and tool call ids
+            sentinel_tool_ids = [choice_ids.tool_call_ids[0].tool_id for choice_ids in create_new_chat_response.choice_ids]
+            sentinel_tool_call_ids = [choice_ids.tool_call_ids[0].tool_call_id for choice_ids in create_new_chat_response.choice_ids]
 
             # Get the run by the ID
             supervision_config = get_supervision_config()
@@ -149,8 +154,12 @@ class APILogger:
             # Iterate over all the tool calls
             # Get the supervisors for that tool
             # Run each supervisor 
-            for tool_call in tool_calls:
-                tool_id = tool_call['id']
+            for idx, tool_call in enumerate(response_data_tool_calls):
+                function = tool_call.get('function', {})
+                function_name = function.get('name')
+                tool_kwargs = json.loads(function.get('arguments', {}))
+                tool_id = sentinel_tool_ids[idx]
+                tool_call_id = sentinel_tool_call_ids[idx]
                 supervisors_chains = get_supervisor_chains_for_tool(tool_id, client)
                 
                 tool_code = None
@@ -188,13 +197,12 @@ class APILogger:
                     supervisors = supervisor_chain.supervisors
                     supervisor_chain_id = supervisor_chain.chain_id
                     for position_in_chain, supervisor in enumerate(supervisors):
-                        print(f"Would send supervision request for supervisor {supervisor.id} in chain {supervisor_chain_id} at position {position_in_chain}")
-                        # supervision_request_id = send_supervision_request(
-                        #     supervisor_chain_id=supervisor_chain_id, 
-                        #     supervisor_id=supervisor.id, 
-                        #     request_group_id=tool_request_group.id, 
-                        #     position_in_chain=position_in_chain
-                        # )
+                        supervision_request_id = send_supervision_request(
+                            tool_call_id=tool_call_id, 
+                            supervisor_id=supervisor.id, 
+                            supervisor_chain_id=supervisor_chain_id, 
+                            position_in_chain=position_in_chain
+                        )
 
                         decision = None
                         supervisor_func = supervision_context.get_supervisor_by_id(supervisor.id)
@@ -203,14 +211,12 @@ class APILogger:
                             return None  # Continue to next supervisor
 
                         print(f"Executing supervisor function {supervisor_func}")
-                        fakeUUID = UUID('00000000-0000-0000-0000-000000000000')
                         # Execute supervisor function
                         decision = call_supervisor_function(
                             supervisor_func, 
                             tool, 
                             supervision_context, 
-                            # supervision_request_id=supervision_request_id, 
-                            supervision_request_id=fakeUUID,
+                            supervision_request_id=supervision_request_id, 
                             decision=decision
                         )
                         chain_decisions.append(decision)
@@ -218,19 +224,12 @@ class APILogger:
 
                         # Don't submit results for human supervision because it is handled by the server
                         if supervisor.type != SupervisorType.HUMAN_SUPERVISOR:
-                            print(f"Would send supervision result for supervisor {supervisor.id} in chain {supervisor_chain_id} at position {position_in_chain}")
                             # We send the decision to the API
-                        #     send_supervision_result(
-                        #         supervision_request_id=supervision_request_id,
-                        #         request_group_id=tool_request_group.id,
-                        #         tool_id=tool_id,
-                        #         supervisor_id=supervisor.id,
-                        #         decision=decision,
-                        #         client=client,
-                        #         tool_request=tool_request, #TODO: Fix for n > 1
-                        #         tool_args=tool_args, #TODO: If modified, send modified args and kwargs
-                        #         tool_kwargs=tool_kwargs
-                        # )
+                            send_supervision_result(
+                                tool_call_id=tool_call_id,
+                                supervision_request_id=supervision_request_id,
+                                decision=decision,
+                        )
                         # Handle the decision
                         error_message = self.handle_supervision_decision(
                             decision, 
@@ -243,7 +242,8 @@ class APILogger:
                 # Handle the final decisions
                 final_error_message = self.handle_final_decisions(
                     all_decisions, 
-                    tool
+                    tool,
+                    tool_kwargs
                 )
                 
                 if final_error_message:
@@ -298,9 +298,8 @@ class APILogger:
         self,
         all_decisions: List[SupervisionDecision],
         tool: Tool,
-        tool_args: List[Any],
         tool_kwargs: Dict[str, Any],
-        ignored_attributes: List[str]
+        ignored_attributes: List[str] = []
     ) -> Any:
         """Process all decisions and execute the function if approved"""
         
@@ -309,7 +308,7 @@ class APILogger:
             decision.decision in [SupervisionDecisionType.APPROVE, SupervisionDecisionType.MODIFY] 
             for decision in all_decisions
         ):
-            return f"All decisions approved or modified. Executing {tool.name} with args: {tool_args} and kwargs: {tool_kwargs}"   
+            return f"All decisions approved or modified. Executing {tool.name} with kwargs: {tool_kwargs}"   
         else:
             explanations = " ".join([f"Supervisor {idx}: Decision: {d.decision}, Explanation: {d.explanation} \n" 
                                     for idx, d in enumerate(all_decisions)])

@@ -21,8 +21,13 @@ from sentinel.api.generated.sentinel_api_client.api.tool.create_run_tool import 
 from sentinel.api.generated.sentinel_api_client.api.run.create_run import sync_detailed as create_run_sync_detailed
 from sentinel.api.generated.sentinel_api_client.api.supervisor.create_supervisor import sync_detailed as create_supervisor_sync_detailed
 from sentinel.api.generated.sentinel_api_client.api.supervisor.create_tool_supervisor_chains import sync_detailed as create_tool_supervisor_chains_sync_detailed
+from sentinel.api.generated.sentinel_api_client.api.supervision.create_supervision_request import sync_detailed as create_supervision_request_sync_detailed
+from sentinel.api.generated.sentinel_api_client.api.supervision.create_supervision_result import sync_detailed as create_supervision_result_sync_detailed
 from sentinel.api.generated.sentinel_api_client.models.supervisor import Supervisor
 from sentinel.api.generated.sentinel_api_client.models.supervisor_chain import SupervisorChain
+from sentinel.api.generated.sentinel_api_client.models.supervision_request import SupervisionRequest
+from sentinel.api.generated.sentinel_api_client.models.supervision_result import SupervisionResult
+from sentinel.api.generated.sentinel_api_client.models.decision import Decision
 from sentinel.api.generated.sentinel_api_client.api.supervisor.get_tool_supervisor_chains import sync_detailed as get_tool_supervisor_chains_sync_detailed
 
 from sentinel.supervision.config import SupervisionContext, get_supervision_config
@@ -30,6 +35,7 @@ from sentinel.supervision.supervisors import auto_approve_supervisor
 from sentinel.utils.utils import get_function_code
 from sentinel.settings import settings
 
+from sentinel.supervision.config import SupervisionDecision, SupervisionDecisionType
 from langchain_core.tools.structured import StructuredTool
 
 class APIClientFactory:
@@ -142,10 +148,6 @@ def create_run(
     """
     Creates a new run for a task under a project using the Sentinel API.
     """
-    if not project_id:
-        raise ValueError("Project ID is required")
-    if not task_id:
-        raise ValueError("Task ID is required")
     
     if run_name is None:
         run_name = f"run-{uuid4().hex[:8]}"
@@ -373,3 +375,85 @@ def get_supervisor_chains_for_tool(tool_id: UUID, client: Client) -> List[Superv
         print(f"Error retrieving supervisors: {e}")
     
     return supervisors_list
+
+
+def send_supervision_request(tool_call_id: UUID, supervisor_id: UUID, supervisor_chain_id: UUID, position_in_chain: int) -> UUID:
+    client = APIClientFactory.get_client()
+
+    supervision_request = SupervisionRequest(
+        position_in_chain=position_in_chain,
+        supervisor_id=supervisor_id
+    )
+
+    try:
+        supervision_request_response = create_supervision_request_sync_detailed(
+            client=client,
+            tool_call_id=tool_call_id,
+            chain_id=supervisor_chain_id,
+            supervisor_id=supervisor_id,    
+            body=supervision_request
+        )
+        if (
+            supervision_request_response.status_code in [200, 201] and
+            supervision_request_response.parsed is not None
+        ):
+            supervision_request_id = supervision_request_response.parsed
+            print(f"Created supervision request with ID: {supervision_request_id}")
+            if isinstance(supervision_request_id, UUID):
+                return supervision_request_id
+            else:
+                raise ValueError("Invalid supervision request ID received.")
+        else:
+            raise Exception(f"Failed to create supervision request. Response: {supervision_request_response}")
+    except Exception as e:
+        print(f"Error creating supervision request: {e}, Response: {supervision_request_response}")
+        raise
+    
+
+def send_supervision_result(
+    supervision_request_id: UUID,
+    decision: SupervisionDecision,
+    tool_call_id: UUID,
+):
+    """
+    Send the supervision result to the API.
+    """
+    client = APIClientFactory.get_client()
+    # Map SupervisionDecisionType to Decision enum
+    decision_mapping = {
+        SupervisionDecisionType.APPROVE: Decision.APPROVE,
+        SupervisionDecisionType.REJECT: Decision.REJECT,
+        SupervisionDecisionType.MODIFY: Decision.MODIFY,
+        SupervisionDecisionType.ESCALATE: Decision.ESCALATE,
+        SupervisionDecisionType.TERMINATE: Decision.TERMINATE,
+    }
+    
+    api_decision = decision_mapping.get(decision.decision)
+    if not api_decision:
+        raise ValueError(f"Unsupported decision type: {decision.decision}")
+    
+    # if decision.modified is not None:
+        # TODO: Handling modified decisions might be needed here
+        
+    # Create the SupervisionResult object
+    supervision_result = SupervisionResult(
+        supervision_request_id=supervision_request_id,
+        created_at=datetime.now(timezone.utc),
+        decision=api_decision,
+        reasoning=decision.explanation or "",
+        toolcall_id=tool_call_id
+    )
+    # Send the supervision result to the API
+    try:
+        response = create_supervision_result_sync_detailed(
+            supervision_request_id=supervision_request_id,
+            client=client,
+            body=supervision_result
+        )
+        if response.status_code in [200, 201]:
+            print(f"Successfully submitted supervision result for supervision request ID: {supervision_request_id}")
+        else:
+            raise Exception(f"Failed to submit supervision result. Response: {response}")
+    except Exception as e:
+        print(f"Error submitting supervision result: {e}, Response: {response}")
+        raise
