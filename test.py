@@ -1,3 +1,4 @@
+import json
 import os
 
 os.environ["SENTINEL_API_URL"] = "http://localhost:8080/api/v1"
@@ -92,43 +93,59 @@ tools = [
 
 client = OpenAI()
 
-for i in range(1):
-    run_id = sentinel_init(
-        project_name="my-project", 
-        task_name="my-task", 
-        run_name="my-run"
-    )
-    wrapped_client = sentinel_openai_client(client, run_id)
+run_id = sentinel_init(
+    project_name="my-project", 
+    task_name="my-task", 
+    run_name="my-run"
+)
+wrapped_client = sentinel_openai_client(client, run_id)
 
+# Initialize conversation history
+messages = []
+
+
+# Run 5 interactions
+for i in range(5):
+    # Get user input
+    user_input = input(f"\nEnter message {i+1}/5: ")
+    
+    # Add user message to history
+    messages.append({"role": "user", "content": user_input})
+    
+    # Make API call
     response = wrapped_client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"content":[{"text":"What's the weather in Tokyo please use the get_weather tool?","type":"text"}],"role":"user"}],
+        messages=messages,
         tools=tools,
         tool_choice="auto",
         temperature=1.5,
-        n=3
+        n=1
     )
+    
+    assistant_message = response.choices[0].message
+    
+    # Add assistant's response to conversation history
+    messages.append({"role": "assistant", "content": assistant_message.content, "tool_calls": assistant_message.tool_calls})
+    
+    # If there are tool calls, execute them and add their results to the conversation
+    if assistant_message.tool_calls:
+        for tool_call in assistant_message.tool_calls:
+            function_name = tool_call.function.name
+            function_args = json.loads(tool_call.function.arguments)
+            
+            # Execute the function
+            if function_name == "get_weather":
+                result = get_weather(**function_args)
+            elif function_name == "book_flight":
+                result = book_flight(**function_args)
+            elif function_name == "book_hotel":
+                result = book_hotel(**function_args)
+            
+            # Add the function response to messages
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": str(result)
+            })
 
-    for choice in response.choices:
-        print(choice.message.tool_calls)
-        # print(choice.message.tool_calls)
-    # print(response)
-
-
-
-
-# Bring your favourite LLM client
-client = OpenAI()
-
-# Initialize Sentinel
-run_id = sentinel_init()
-
-# Wrap your client
-client = sentinel_openai_client(client, run_id)
-
-response = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[{"content":[{"text":"What's the weather in Tokyo?","type":"text"}],"role":"user"}],
-)
-
-
+sentinel_end(run_id)
