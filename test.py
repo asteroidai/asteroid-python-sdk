@@ -1,12 +1,17 @@
+import os
+
+os.environ["SENTINEL_API_URL"] = "http://localhost:8080/api/v1"
+
 from sentinel.supervision.decorators import supervise
+from sentinel.supervision.config import SupervisionDecision, SupervisionDecisionType
 # Define a supervisor
 def my_supervisor():
-    """Human supervisor for reviewing actions."""
-    def human_supervisor(action, context):
+    """Supervisor for reviewing actions."""
+    def supervisor1(action, supervision_context, **kwargs):
         # Supervisor implementation
         print(f"Supervisor received action: {action}")
-        pass
-    return human_supervisor
+        return SupervisionDecision(decision=SupervisionDecisionType.APPROVE)
+    return supervisor1
 
 # Use the decorator
 @supervise(supervision_functions=[[my_supervisor()]])
@@ -21,11 +26,11 @@ def get_weather(location: str, unit: str):
 
 def your_supervisor():
     """Your supervisor."""
-    def supervisor1(action, context):
+    def supervisor2(action, supervision_context, **kwargs):
         # Supervisor implementation
         print(f"Supervisor received action: {action}")
-        pass
-    return supervisor1
+        return SupervisionDecision(decision=SupervisionDecisionType.ESCALATE)
+    return supervisor2
 
 @supervise(supervision_functions=[[your_supervisor(), my_supervisor()]], ignored_attributes=["maximum_price"])
 def book_hotel(location: str, checkin: str, checkout: str, maximum_price: float):
@@ -101,7 +106,7 @@ for i in range(1):
         tools=tools,
         tool_choice="auto",
         temperature=1.5,
-        n=5
+        n=3
     )
 
     for choice in response.choices:
