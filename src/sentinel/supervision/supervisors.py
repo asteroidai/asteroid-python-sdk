@@ -1,4 +1,6 @@
 from typing import Callable, Optional, Protocol, Any
+from functools import wraps
+from uuid import UUID
 
 from sentinel.api.generated.sentinel_api_client.models.tool import Tool
 from .config import (
@@ -12,25 +14,22 @@ import inspect
 import json
 from openai import OpenAI
 from inspect_ai.tool import ToolCall
-from uuid import UUID
 
 client = OpenAI()
 
-class Supervisor(Protocol):
+class ToolCallSupervisor(Protocol):
     """
-    Protocol for supervisor functions.
-    Defines the expected signature for supervisor callables.
+    Protocol for tool call supervisors.
     """
 
     def __call__(
         self,
-        func: Callable,
+        tool: Tool,
+        tool_call: dict,
         supervision_context: SupervisionContext,
-        ignored_attributes: list[str],
-        tool_args: list[Any],
-        tool_kwargs: dict[str, Any],
-        supervision_request_id: Optional[UUID],
-        decision: Optional[SupervisionDecision] = None,
+        ignored_attributes: list[str] = [],
+        supervision_request_id: Optional[UUID] = None,
+        previous_decision: Optional[SupervisionDecision] = None,
         **kwargs
     ) -> SupervisionDecision:
         """
@@ -39,15 +38,31 @@ class Supervisor(Protocol):
 
         Args:
             func (Callable): The function being supervised.
-            supervision_context (SupervisionContext): Additional context.
+            tool_call (dict): The tool call to be supervised.
             ignored_attributes (List[str]): Attributes to ignore.
-            tool_args (List[Any]): Positional arguments for the function.
             tool_kwargs (dict[str, Any]): Keyword arguments for the function.
+            supervision_context (SupervisionContext): Additional context.
             supervision_request_id (Optional[UUID]): ID of the supervision request.
-            decision (Optional[SupervisionDecision]): Decision made by the previous supervisor that escalated to this Supervisor.
+            previous_decision (Optional[SupervisionDecision]): Decision made by the previous supervisor that escalated to this Supervisor.
         Returns:
             SupervisionDecision: The decision made by the supervisor.
         """
+        ...
+
+
+class ChatSupervisor(Protocol):
+    """
+    Protocol for chat supervisors.
+    """
+
+    def __call__(
+        self,
+        message: dict,
+        supervision_context: Optional[SupervisionContext],
+        supervision_request_id: Optional[UUID],
+        previous_decision: Optional[SupervisionDecision] = None,
+        **kwargs
+    ) -> SupervisionDecision:
         ...
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -63,7 +78,7 @@ def llm_supervisor(
     openai_model: str = PREFERRED_LLM_MODEL,
     system_prompt: Optional[str] = None,
     include_context: bool = False
-) -> Supervisor:
+) -> ToolCallSupervisor:
     """
     Create a supervisor function that uses an LLM to make a supervision decision.
     """
@@ -214,7 +229,7 @@ ModifiedData:
 def human_supervisor(
     timeout: int = 300,
     n: int = 1,
-) -> Supervisor:
+) -> ToolCallSupervisor:
     """
     Create a supervisor function that requires human approval via backend API or CLI.
 
@@ -282,7 +297,7 @@ def human_supervisor(
     return supervisor
 
 
-def auto_approve_supervisor() -> Supervisor:
+def auto_approve_supervisor() -> ToolCallSupervisor:
     """Creates a supervisor that automatically approves any input."""
     def supervisor(
         func: Callable,
@@ -300,3 +315,30 @@ def auto_approve_supervisor() -> Supervisor:
     supervisor.__name__ = auto_approve_supervisor.__name__
     supervisor.supervisor_attributes = {}
     return supervisor
+
+def tool_supervisor(**config_kwargs) -> Callable:
+    """Decorator to create a supervisor function with arbitrary configuration parameters."""
+    def decorator(func: Callable) -> ToolCallSupervisor:
+        @wraps(func)
+        def wrapper(
+            tool: Tool,
+            tool_call: dict,
+            supervision_context: SupervisionContext,
+            ignored_attributes: list[str] = [],
+            supervision_request_id: Optional[UUID] = None,
+            previous_decision: Optional[SupervisionDecision] = None,
+            **kwargs
+        ) -> SupervisionDecision:
+            # Pass the configuration parameters to the supervisor function
+            return func(
+                tool=tool,
+                tool_call=tool_call,
+                supervision_context=supervision_context,
+                ignored_attributes=ignored_attributes,
+                supervision_request_id=supervision_request_id,
+                previous_decision=previous_decision,
+                config_kwargs=config_kwargs,
+                **kwargs
+            )
+        return wrapper
+    return decorator
