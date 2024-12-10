@@ -1,39 +1,45 @@
 import json
 import os
+from typing import Any
 
 os.environ["SENTINEL_API_URL"] = "http://localhost:8080/api/v1"
 
 from sentinel.supervision.decorators import supervise
-from sentinel.supervision.config import SupervisionDecision, SupervisionDecisionType
-# Define a supervisor
-def my_supervisor():
-    """Supervisor for reviewing actions."""
-    def supervisor1(action, supervision_context, **kwargs):
-        # Supervisor implementation
-        print(f"Supervisor received action: {action}")
+from sentinel.supervision.config import SupervisionDecision, SupervisionDecisionType, ExecutionMode, RejectionPolicy, MultiSupervisorResolution
+from sentinel.supervision.supervisors import human_supervisor, llm_supervisor, tool_supervisor
+
+@tool_supervisor(strategy="reject")
+def supervisor1(
+    tool_call: dict,
+    config_kwargs: dict[str, Any],
+    **kwargs
+) -> SupervisionDecision:
+    # Supervisor implementation using configuration parameters
+    print(f"Supervisor received tool_call: {tool_call}")
+    strategy = config_kwargs.get("strategy","")
+    if strategy == "allow_all":
         return SupervisionDecision(decision=SupervisionDecisionType.APPROVE)
-    return supervisor1
+    else:
+        return SupervisionDecision(decision=SupervisionDecisionType.REJECT)
 
 # Use the decorator
-@supervise(supervision_functions=[[my_supervisor()]])
+@supervise(supervision_functions=[[supervisor1]], ignored_attributes=["maximum_price"])
 def book_flight(departure_city: str, arrival_city: str, datetime: str, maximum_price: float):
     """Book a flight ticket."""
     return f"Flight booked from {departure_city} to {arrival_city} on {datetime}."
 
-@supervise(supervision_functions=[[my_supervisor()]])
+@supervise(supervision_functions=[[supervisor1]])
 def get_weather(location: str, unit: str):
     """Get the weather in a city."""
     return f"The weather in {location} is {unit}."
 
-def your_supervisor():
-    """Your supervisor."""
-    def supervisor2(action, supervision_context, **kwargs):
-        # Supervisor implementation
-        print(f"Supervisor received action: {action}")
-        return SupervisionDecision(decision=SupervisionDecisionType.ESCALATE)
-    return supervisor2
+@tool_supervisor()
+def supervisor2(tool_call, supervision_context, **kwargs):
+    # Supervisor implementation
+    print(f"Supervisor received tool_call: {tool_call}")
+    return SupervisionDecision(decision=SupervisionDecisionType.ESCALATE)
 
-@supervise(supervision_functions=[[your_supervisor(), my_supervisor()]], ignored_attributes=["maximum_price"])
+@supervise(supervision_functions=[[supervisor2, supervisor1]], ignored_attributes=["maximum_price"])
 def book_hotel(location: str, checkin: str, checkout: str, maximum_price: float):
     """Book a hotel."""
     return f"Hotel booked in {location} from {checkin} to {checkout}."
@@ -93,12 +99,23 @@ tools = [
 
 client = OpenAI()
 
-run_id = sentinel_init(
-    project_name="my-project", 
-    task_name="my-task", 
-    run_name="my-run"
-)
-wrapped_client = sentinel_openai_client(client, run_id)
+EXECUTION_SETTINGS = {
+    "execution_mode": ExecutionMode.SUPERVISION, # can be "monitoring" or "supervision", monitoring is async and supervision is sync by default
+    "allow_tool_modifications": True, # allow the tool to be modified by the supervisor
+    "rejection_policy": RejectionPolicy.RESAMPLE_WITH_FEEDBACK, # policy to use when the supervisor rejects the tool call
+    "n_resamples": 3, # number of resamples to use when the supervisor rejects the tool call
+    "multi_supervisor_resolution": MultiSupervisorResolution.ALL_MUST_APPROVE, # resolution strategy when multiple supervisors are running in parallel
+    "remove_feedback_from_context": True, # remove the feedback from the context
+}
+
+for i in range(1):
+    run_id = sentinel_init(
+        project_name="my-project", 
+        task_name="my-task", 
+        run_name="my-run",
+        execution_settings=EXECUTION_SETTINGS
+    )
+    wrapped_client = sentinel_openai_client(client, run_id, EXECUTION_SETTINGS["execution_mode"])
 
 # Initialize conversation history
 messages = []
@@ -149,3 +166,30 @@ for i in range(5):
             })
 
 sentinel_end(run_id)
+
+
+
+# TODO: This is example how future chat supervisors could look like
+# @chat_supervisor():
+# """Supervisor to check Tokyo is not mentioned in the last message. If it is reject the tool call."""
+# def supervisor1(tool_call: dict, supervision_context, **kwargs):
+#     # Supervisor implementation
+#     print(f"Checkin if Tokyo is mentioned in the last message: {tool_call}")
+#     return SupervisionDecision(decision=SupervisionDecisionType.APPROVE)
+
+
+
+# # Bring your favourite LLM client
+# client = OpenAI()
+
+# # Initialize Sentinel
+# run_id = sentinel_init()
+
+# # Wrap your client
+# client = sentinel_openai_client(client, run_id)
+
+# response = client.chat.completions.create(
+#     model="gpt-4o-mini",
+#     messages=[{"content":[{"text":"What's the weather in Tokyo?","type":"text"}],"role":"user"}],
+#     supervisors=[chat_supervisor()]
+# )

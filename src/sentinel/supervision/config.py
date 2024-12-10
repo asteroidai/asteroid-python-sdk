@@ -15,6 +15,7 @@ from sentinel.api.generated.sentinel_api_client.models.task_state import TaskSta
 from sentinel.api.generated.sentinel_api_client.models.message import Message
 from sentinel.api.generated.sentinel_api_client.models.output import Output as ApiOutput
 from sentinel.mocking.policies import MockPolicy
+from openai.types.chat.chat_completion_message import ChatCompletionMessageToolCall
 from sentinel.api.generated.sentinel_api_client.types import UNSET
 
 from inspect_ai.solver import TaskState
@@ -31,6 +32,17 @@ class SupervisionDecisionType(str, Enum):
     TERMINATE = "terminate"
     MODIFY = "modify"
 
+class ExecutionMode(str, Enum):
+    MONITORING = "monitoring"
+    SUPERVISION = "supervision"
+    
+class RejectionPolicy(str, Enum):
+    RESAMPLE_WITH_FEEDBACK = "resample_with_feedback"
+
+class MultiSupervisorResolution(str, Enum):
+    ALL_MUST_APPROVE = "all_must_approve"
+
+
 class ModifiedData(BaseModel):
     tool_args: Optional[List[Any]] = None
     """Modified positional arguments for the tool/function."""
@@ -41,6 +53,8 @@ class ModifiedData(BaseModel):
     original_inspect_ai_call: Optional[ToolCall] = None
     """Original InspectAI call that was modified."""
     
+    openai_tool_call: Optional[ChatCompletionMessageToolCall] = None
+    """New OpenAI tool call that was createdcreated."""
     #TODO: Update to support changing the tool call itself
 
 class SupervisionDecision(BaseModel):
@@ -337,6 +351,7 @@ class SupervisionConfig:
         self.previous_calls: Dict[str, List[Any]] = {}
         self.llm = None
         self.client = None  # Sentinel API client
+        self.execution_settings: Dict[str, Any] = {}
 
         # Hierarchical projects structure
         self.projects: Dict[str, Project] = {}  # Mapping from project_name to Project
@@ -355,6 +370,9 @@ class SupervisionConfig:
 
     def set_mock_policy(self, mock_policy: MockPolicy):
         self.global_mock_policy = mock_policy
+        
+    def set_execution_settings(self, execution_settings: Dict[str, Any]):
+        self.execution_settings = execution_settings
 
     def load_previous_execution_log(self, log_file_path: str, log_format='langchain'):
         """Load and process a previous execution log."""

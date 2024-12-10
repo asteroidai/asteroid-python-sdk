@@ -4,7 +4,7 @@ Handles helper functions for registration with Sentinel.
 
 from datetime import datetime, timezone
 import inspect
-from typing import Any, Callable, Optional, List
+from typing import Any, Callable, Dict, Optional, List
 from uuid import UUID, uuid4
 
 from sentinel.api.generated.sentinel_api_client.client import Client
@@ -197,12 +197,13 @@ def create_run(
     except Exception as e:
         raise ValueError(f"Failed to create run: {str(e)}")
 
-def register_tools_and_supervisors(run_id: UUID, tools: Optional[List[Callable | StructuredTool]] = None):
+def register_tools_and_supervisors(run_id: UUID, tools: Optional[List[Callable | StructuredTool]] = None, execution_settings: Dict[str, Any] = {}):
     """
     Registers tools and supervisors with the backend API.
     """
     supervision_config = get_supervision_config()
-
+    supervision_config.set_execution_settings(execution_settings)
+    
     client = APIClientFactory.get_client()
 
     # Access the registries from the context
