@@ -4,10 +4,17 @@
 A Python SDK for interacting with the Sentinel platform.
 
 ## Installation
+From the package:
+
 ```bash
 pip install sentinel-python-sdk
 ```
-  
+
+From the source:
+```bash
+pip install -e ".[dev]"
+```
+
 ## Quick Start
 ```python
 import sentinel
