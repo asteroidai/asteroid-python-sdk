@@ -171,14 +171,19 @@ class APILogger:
                 elif not processed_tool_call:
                     # Rejected, decide based on the rejection policy
                     if rejection_policy == RejectionPolicy.RESAMPLE_WITH_FEEDBACK:
+                        # We create updated messages with the original messages and the original tool call
                         updated_messages = copy.deepcopy(request_kwargs["messages"])
+                        # updated_messages.append(response_data['choices'][0]['message'])
+                        resampled_tool_call = copy.deepcopy(tool_call)
+                        resampled_all_decisions = copy.deepcopy(all_decisions)
+                        
                         for resample in range(n_resamples):
                             # Add feedback to the context for all rejected, escalated and terminated supervisors
-                            feedback_from_supervisors = " ".join([f"Supervisor {idx}: Decision: {d.decision}, Explanation: {d.explanation} \n" for idx, d in enumerate(all_decisions) if d.decision in [SupervisionDecisionType.REJECT, SupervisionDecisionType.ESCALATE, SupervisionDecisionType.TERMINATE]])
+                            feedback_from_supervisors = " ".join([f"Supervisor {idx}: Decision: {d.decision}, Explanation: {d.explanation} \n" for idx, d in enumerate(resampled_all_decisions) if d.decision in [SupervisionDecisionType.REJECT, SupervisionDecisionType.ESCALATE, SupervisionDecisionType.TERMINATE]])
                             # TODO: Improve the feedback message
                             
-                            tool_name = tool_call.function.name
-                            tool_kwargs = tool_call.function.arguments
+                            tool_name = resampled_tool_call.function.name
+                            tool_kwargs = resampled_tool_call.function.arguments
                             feedback_message = f"User tried to execute tool: {tool_name} with arguments: {tool_kwargs}, but it was rejected by some supervisors. \n {feedback_from_supervisors} \n Please try again with the feedback!"
                             
                             if "messages" in request_kwargs:
@@ -195,6 +200,7 @@ class APILogger:
                             
                             # Run the model again
                             resampled_response = completions.create(*args, **resampled_request_kwargs)
+                            
                             resampled_response_data_str, resampled_request_data_str = self.convert_to_json(resampled_response.to_dict(), resampled_request_kwargs)
                             resampled_response_data_base64, resampled_request_data_base64 = self.encode_to_base64(resampled_response_data_str, resampled_request_data_str)
                             body = self.create_final_payload(resampled_response_data_base64, resampled_request_data_base64)
@@ -226,11 +232,20 @@ class APILogger:
                                     remove_feedback_from_context=remove_feedback_from_context
                                 )
                                 if not modified and processed_tool_call:
-                                    new_response_messages.append(processed_tool_call)
+                                    # Approved, we need to add the final tool call to the response
+                                    # Change the role of the updated messages to sentinel
+                                    for message in updated_messages:
+                                        message["role"] = "sentinel"
+                                    # TODO: If remove_feedback_from_context is False, it would be handled here
+                                    new_response_messages.append(ChatCompletionMessage(role="assistant",
+                                                                                       tool_calls=[ChatCompletionMessageToolCall(**processed_tool_call)]))
                                     break
                         else:
-                            explanations = " ".join([f"Supervisor {idx}: Decision: {d.decision}, Explanation: {d.explanation} \n" for idx, d in enumerate(all_decisions)])
-                            rejection_message = f"The agent requested to execute a function but it was rejected by some supervisors.\n Chain Explanations: \n{explanations}\n This is not a message from the user but from a supervisor system that is helping the agent to improve its behavior. You should try something else!"
+                            # All samples were rejected
+                            # We need to summarise all the feedback from updated messages into one message that will be sent to the user
+                            explanations = "Original user message: " + updated_messages[0]["content"] + "\n"
+                            explanations += " ".join([f"Resample {resample+1}: {message['role']}: {message['content']}\n" for resample, message in enumerate(updated_messages[1:])])
+                            rejection_message = f"The agent requested to execute a function but it was rejected by some supervisors.\n We tried {n_resamples} times to get a valid response but it was rejected each time.\n Here is the feedback from the supervisors: \n{explanations}\n This is not a message from the user but from a supervisor system that is helping the agent to improve its behavior. You should try something else!"
                             new_response_messages.append(ChatCompletionMessage(role="assistant", content=rejection_message))
                         
                 else:
@@ -355,75 +370,6 @@ class APILogger:
             )
         
         return decision
-
-    # def handle_supervision_decision(
-    #     self,
-    #     decision: SupervisionDecision,
-    #     chain_decisions: List[SupervisionDecision],
-    #     tool: Tool,
-    #     tool_call: dict,
-    #     allow_tool_modifications: bool,
-    #     rejection_policy: str,
-    #     n_resamples: int,
-    #     multi_supervisor_resolution: str,
-    #     remove_feedback_from_context: bool,
-    #     completions: Any,
-    #     args: Any
-    # ) -> Optional[str]:
-    #     """Handle a supervision decision and return an error message if execution should stop"""
-        
-    #     if decision.decision == SupervisionDecisionType.APPROVE:
-    #         return None
-        
-    #     elif decision.decision == SupervisionDecisionType.REJECT:
-    #         explanations = " ".join([f"Decision: {d.decision}, Explanation: {d.explanation}" for d in chain_decisions])
-    #         return (f"The agent requested to execute {tool.name} but it was rejected. "
-    #                 f"Explanation: {decision.explanation}. "
-    #                 f"Chain Explanations: {explanations}\n"
-    #                 "This is not a message from the user but from a supervisor system that is helping the agent to improve its behavior. You should try different action using the feedback!")
-                
-    #     elif decision.decision == SupervisionDecisionType.ESCALATE:
-    #         # Handled by caller - return None to continue to next supervisor
-    #         return None
-        
-    #     elif decision.decision == SupervisionDecisionType.MODIFY:
-    #         # Handled by caller - return None to continue processing
-    #         return None
-        
-    #     elif decision.decision == SupervisionDecisionType.TERMINATE:
-    #         explanations = " ".join([f"Decision: {d.decision}, Explanation: {d.explanation}" for d in chain_decisions])
-    #         return (f"Execution of {tool.name} should be terminated. "
-    #                 f"Explanation: {decision.explanation}. "
-    #                 f"Chain Explanations: {explanations}\n"
-    #                 "This is not a message from the user but from a supervisor system that is helping the agent to improve its behavior. You should try different action using the feedback!")
-        
-    #     else:
-    #         explanations = " ".join([f"Decision: {d.decision}, Explanation: {d.explanation}" for d in chain_decisions])
-    #         return (f"Execution of {tool.name} was cancelled due to an unknown supervision decision. "
-    #                 f"Chain Explanations: {explanations}\n"
-    #                 "This is not a message from the user but from a supervisor system that is helping the agent to improve its behavior. You should try different action using the feedback!")
-
-    # def handle_final_decisions(
-    #     self,
-    #     all_decisions: List[SupervisionDecision],
-    #     tool: Tool,
-    #     tool_kwargs: Dict[str, Any],
-    #     ignored_attributes: List[str] = []
-    # ) -> Any:
-    #     """Process all decisions and execute the function if approved"""
-        
-    #     # Check if all decisions are approve or modify
-    #     if all(
-    #         decision.decision in [SupervisionDecisionType.APPROVE, SupervisionDecisionType.MODIFY] 
-    #         for decision in all_decisions
-    #     ):
-    #         return f"All decisions approved or modified. Executing {tool.name} with kwargs: {tool_kwargs}"   
-    #     else:
-    #         explanations = " ".join([f"Supervisor {idx}: Decision: {d.decision}, Explanation: {d.explanation} \n" 
-    #                                 for idx, d in enumerate(all_decisions)])
-    #         return (f"The agent requested to execute a function but it was rejected by some supervisors.\n"
-    #                 f"Chain Explanations: \n{explanations}\n"
-    #                 "This is not a message from the user but from a supervisor system that is helping the agent to improve its behavior. You should try something else!")
 
     def create_final_payload(self, response_data_base64: str, request_data_base64: str) -> SentinelChat:
         """Create the final payload for the API request."""
