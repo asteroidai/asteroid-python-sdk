@@ -6,7 +6,7 @@ import asyncio
 import base64
 import copy
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable
 from uuid import UUID
 
 from openai.types.chat.chat_completion import ChatCompletion
@@ -21,6 +21,7 @@ from sentinel.api.generated.sentinel_api_client.api.run.create_new_chat import (
 from sentinel.api.generated.sentinel_api_client.api.tool import get_tool
 from sentinel.api.generated.sentinel_api_client.models import SentinelChat
 from sentinel.api.generated.sentinel_api_client.models.supervisor_type import SupervisorType
+from sentinel.supervision.config import ExecutionMode
 from sentinel.api.generated.sentinel_api_client.models.tool import Tool
 from sentinel.registration.helper import (
     get_supervisor_chains_for_tool,
@@ -143,6 +144,7 @@ class APILogger:
         execution_mode: str,
         completions: Any,
         args: Any,
+        chat_supervisors: Optional[List[Callable]] = None
     ) -> Optional[ChatCompletion]:
         """
         Send the raw response data to the Sentinel API, and process tool calls
@@ -154,6 +156,7 @@ class APILogger:
         :param execution_mode: The execution mode for the logging.
         :param completions: The completions object (e.g., the OpenAI.Completions class).
         :param args: Additional arguments for the completions.create call.
+        :param chat_supervisors: The chat supervisors to use for supervision.
         :return: Potentially modified response after supervision and resampling, or None.
         """
         try:
@@ -189,9 +192,14 @@ class APILogger:
             # Check for the presence of tool calls in the response
             response_data_tool_calls = response_data.get('choices', [{}])[0].get('message', {}).get('tool_calls')
             if not response_data_tool_calls:
-                print("No tool calls found in response, skipping supervision checks")
-                return None
-
+                if not chat_supervisors:
+                    print("No tool calls found in response and no chat supervisors provided, skipping supervision checks")
+                    return None
+                else:
+                    print("No tool calls found in response, but chat supervisors provided, executing chat supervisors")
+                    # TODO: Execute chat supervisors
+                    
+            # Execute tool call supervisors
             # Retrieve the supervision configuration
             supervision_config = get_supervision_config()
 
@@ -230,6 +238,7 @@ class APILogger:
                     supervision_context=supervision_context,
                     allow_tool_modifications=allow_tool_modifications,
                     multi_supervisor_resolution=multi_supervisor_resolution,
+                    execution_mode=execution_mode
                 )
 
                 if modified and processed_tool_call:
@@ -241,6 +250,7 @@ class APILogger:
                         supervision_context=supervision_context,
                         allow_tool_modifications=False,
                         multi_supervisor_resolution=multi_supervisor_resolution,
+                        execution_mode=execution_mode
                     )
                     new_response_messages.append(final_tool_call)
                 elif not processed_tool_call:
@@ -280,7 +290,10 @@ class APILogger:
             print(f"\n=== ERROR DETAILS ===")
             print(f"Error type: {type(e)}")
             print(f"Error message: {str(e)}")
-            print(f"Error occurred at line {e.__traceback__.tb_lineno}")
+            if e.__traceback__ is not None:
+                print(f"Error occurred at line {e.__traceback__.tb_lineno}")
+            else:
+                print("No traceback available.")
             raise SentinelLoggingError(f"Failed to log response: {str(e)}") from e
 
     def process_tool_call(
@@ -291,6 +304,7 @@ class APILogger:
         supervision_context: Any,
         allow_tool_modifications: bool,
         multi_supervisor_resolution: str,
+        execution_mode: str
     ) -> tuple[Optional[ChatCompletionMessageToolCall], Any, bool]:
         """
         Process a single tool call through supervision.
@@ -317,7 +331,13 @@ class APILogger:
 
         # Run all supervisors in the chains
         all_decisions = self.run_supervisor_chains(
-            supervisors_chains, tool, tool_call, tool_call_id, supervision_context, multi_supervisor_resolution
+            supervisors_chains=supervisors_chains,
+            tool=tool,
+            tool_call=tool_call,
+            tool_call_id=tool_call_id,
+            supervision_context=supervision_context,
+            multi_supervisor_resolution=multi_supervisor_resolution,
+            execution_mode=execution_mode
         )
 
         # Determine the outcome based on supervisor decisions
@@ -334,7 +354,7 @@ class APILogger:
             # Rejected
             return None, all_decisions, False
 
-    def get_tool(self, tool_id: str) -> Optional[Tool]:
+    def get_tool(self, tool_id: UUID) -> Optional[Tool]:
         """
         Retrieve the tool object by its ID.
 
@@ -356,6 +376,7 @@ class APILogger:
         tool_call_id: str,
         supervision_context: Any,
         multi_supervisor_resolution: str,
+        execution_mode: str
     ) -> List[SupervisionDecision]:
         """
         Run all supervisor chains for a tool call.
@@ -371,7 +392,13 @@ class APILogger:
         all_decisions = []
         for supervisor_chain in supervisors_chains:
             chain_decisions = self.run_supervisors_in_chain(
-                supervisor_chain, tool, tool_call, tool_call_id, supervision_context, supervisor_chain.chain_id
+                supervisor_chain=supervisor_chain, 
+                tool=tool, 
+                tool_call=tool_call, 
+                tool_call_id=tool_call_id, 
+                supervision_context=supervision_context, 
+                supervisor_chain_id=supervisor_chain.chain_id, 
+                execution_mode=execution_mode
             )
             all_decisions.extend(chain_decisions)
             last_decision = chain_decisions[-1]
@@ -394,7 +421,8 @@ class APILogger:
         tool_call: ChatCompletionMessageToolCall,
         tool_call_id: str,
         supervision_context: Any,
-        supervisor_chain_id: str
+        supervisor_chain_id: str,
+        execution_mode: str
     ) -> List[SupervisionDecision]:
         """
         Run each supervisor in a chain and collect decisions.
@@ -410,7 +438,14 @@ class APILogger:
         chain_decisions = []
         for position_in_chain, supervisor in enumerate(supervisor_chain.supervisors):
             decision = self.execute_supervisor(
-                supervisor, tool, tool_call, tool_call_id, position_in_chain, supervision_context, supervisor_chain_id
+                supervisor=supervisor,
+                tool=tool,
+                tool_call=tool_call,
+                tool_call_id=tool_call_id,
+                position_in_chain=position_in_chain,
+                supervision_context=supervision_context,
+                supervisor_chain_id=supervisor_chain_id,
+                execution_mode=execution_mode
             )
             if decision is None:
                 # No decision made, break the chain
@@ -429,7 +464,8 @@ class APILogger:
         tool_call_id: str,
         position_in_chain: int,
         supervision_context: Any,
-        supervisor_chain_id: str
+        supervisor_chain_id: str,
+        execution_mode: str
     ) -> Optional[SupervisionDecision]:
         """
         Execute a single supervisor and return its decision.
@@ -441,6 +477,7 @@ class APILogger:
         :param position_in_chain: The position of the supervisor in the chain.
         :param supervision_context: The supervision context.
         :param supervisor_chain_id: The ID of the supervisor chain.
+        :param execution_mode: The execution mode.
         :return: The supervisor's decision, or None if no function found.
         """
         # Send supervision request
@@ -456,19 +493,24 @@ class APILogger:
         if not supervisor_func:
             print(f"No local supervisor function found for ID {supervisor.id}. Skipping.")
             return None
-
-        # Call the supervisor function to get a decision
-        decision = call_supervisor_function(
-            supervisor_func=supervisor_func,
-            tool=tool,
-            tool_call=tool_call,
-            supervision_context=supervision_context,
-            supervision_request_id=supervision_request_id
-        )
+        
+        
+        if supervisor.type == SupervisorType.HUMAN_SUPERVISOR and execution_mode == ExecutionMode.MONITORING:
+            # If the supervisor is a human superviso and we are in monitoring mode, we automatically approve
+            decision = SupervisionDecision(decision=SupervisionDecisionType.APPROVE)
+        else:
+            # Call the supervisor function to get a decision
+            decision = call_supervisor_function(
+                supervisor_func=supervisor_func,
+                tool=tool,
+                tool_call=tool_call,
+                supervision_context=supervision_context,
+                supervision_request_id=supervision_request_id
+            )
         print(f"Supervisor decision: {decision.decision}")
 
         # Send supervision result back if not a human supervisor
-        if supervisor.type != SupervisorType.HUMAN_SUPERVISOR:
+        if supervisor.type != SupervisorType.HUMAN_SUPERVISOR or execution_mode == ExecutionMode.MONITORING:
             send_supervision_result(
                 tool_call_id=tool_call_id,
                 supervision_request_id=supervision_request_id,
@@ -630,6 +672,7 @@ class APILogger:
                 supervision_context=supervision_context,
                 allow_tool_modifications=False,
                 multi_supervisor_resolution=multi_supervisor_resolution,
+                execution_mode=execution_mode
             )
 
             if not modified and processed_tool_call:

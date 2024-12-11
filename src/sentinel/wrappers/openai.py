@@ -9,6 +9,8 @@ from openai import OpenAIError
 from sentinel.api.logger import APILogger, SentinelLoggingError
 from sentinel.settings import settings
 from sentinel.registration.helper import create_run, register_project, register_task, APIClientFactory, register_tools_and_supervisors
+from sentinel.supervision.config import ExecutionMode
+import asyncio
 
 class CompletionsWrapper:
     """Wraps chat completions with logging capabilities"""
@@ -24,7 +26,17 @@ class CompletionsWrapper:
         self.run_id = run_id
         self.execution_mode = execution_mode
     
-    def create(self, *args, **kwargs) -> Any:
+    def create(self, *args, chat_supervisors: Optional[List[Callable]] = None, **kwargs) -> Any:
+        if self.execution_mode == ExecutionMode.MONITORING:
+            # Run in async mode
+            return asyncio.run(self.create_async(*args, chat_supervisors=chat_supervisors, **kwargs))
+        elif self.execution_mode == ExecutionMode.SUPERVISION:
+            # Run in sync mode
+            return self.create_sync(*args, chat_supervisors=chat_supervisors, **kwargs)
+        else:
+            raise ValueError(f"Invalid execution mode: {self.execution_mode}")
+
+    def create_sync(self, *args, chat_supervisors: Optional[List[Callable]] = None, **kwargs) -> Any:
         # Log the entire request payload
         try:
             self.logger.log_request(kwargs, self.run_id)
@@ -35,20 +47,17 @@ class CompletionsWrapper:
             # Make API call
             response = self._completions.create(*args, **kwargs)
 
-            if self.execution_mode == "supervision":
-                # SYNC LOGGING + SUPERVISION
-                try:
-                    
-                    new_response = self.logger.log_response(response, request_kwargs=kwargs, run_id=self.run_id, execution_mode=self.execution_mode, completions=self._completions, args=args)
-                    if new_response is not None:
-                        print(f"New response: {new_response}")
-                        return new_response
-                except Exception as e:
-                    print(f"Warning: Failed to log response: {str(e)}")
-            else:
-                # ASYNC LOGGING + SUPERVISION
-                print("Async logging + supervision not implemented yet")
-                pass #TODO: Implement async logging
+            # SYNC LOGGING + SUPERVISION
+            try:
+                new_response = self.logger.log_response(
+                    response, request_kwargs=kwargs, run_id=self.run_id, 
+                    execution_mode=self.execution_mode, completions=self._completions, args=args
+                )
+                if new_response is not None:
+                    print(f"New response: {new_response}")
+                    return new_response
+            except Exception as e:
+                print(f"Warning: Failed to log response: {str(e)}")
                 
             return response
             
@@ -57,6 +66,40 @@ class CompletionsWrapper:
                 raise e
             except SentinelLoggingError:
                 raise e
+
+    async def create_async(self, *args, chat_supervisors: Optional[List[Callable]] = None, **kwargs) -> Any:
+        # Log the entire request payload asynchronously
+        try:
+            await asyncio.to_thread(self.logger.log_request, kwargs, self.run_id)
+        except SentinelLoggingError as e:
+            print(f"Warning: Failed to log request: {str(e)}")
+        
+        try:
+            # Make API call synchronously
+            response = self._completions.create(*args, **kwargs)
+
+            # ASYNC LOGGING + SUPERVISION
+            # Schedule the log_response to run in the background
+            asyncio.create_task(self.async_log_response(response, kwargs, args, chat_supervisors))
+            
+            # Return the response immediately
+            return response
+            
+        except OpenAIError as e:
+            try:
+                raise e
+            except SentinelLoggingError:
+                raise e
+
+    async def async_log_response(self, response, kwargs, args, chat_supervisors):
+        try:
+            await asyncio.to_thread(
+                self.logger.log_response, response, request_kwargs=kwargs, run_id=self.run_id, 
+                execution_mode=self.execution_mode, completions=self._completions, args=args, chat_supervisors=chat_supervisors
+            )
+        except Exception as e:
+            print(f"Warning: Failed to log response: {str(e)}")
+
 
 def sentinel_openai_client(
     openai_client: Any, 
