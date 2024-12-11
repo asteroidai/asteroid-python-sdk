@@ -202,6 +202,9 @@ class APILogger:
                 return None
 
             supervision_context = run.supervision_context
+            # Update messages on the supervision context - This is so that the supervisor can see the messages history
+            # TODO: The messages could be updated in a more elegant way
+            supervision_context.update_messages(request_kwargs['messages'])
 
             # Extract execution settings from the supervision configuration
             allow_tool_modifications = supervision_config.execution_settings.get('allow_tool_modifications', False)
@@ -263,8 +266,8 @@ class APILogger:
                         # Handle other rejection policies if necessary
                         pass
                 else:
-                    # Approved tool call, add the original message
-                    new_response_messages.append(request_kwargs['messages'][idx])
+                    # Approved tool call, add the original message tool call
+                    new_response_messages.append(response.choices[idx].message)
 
             # Construct the new response with the potentially modified messages
             new_response = copy.deepcopy(response)
