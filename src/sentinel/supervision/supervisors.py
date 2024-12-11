@@ -3,6 +3,7 @@ from functools import wraps
 from uuid import UUID
 
 from sentinel.api.generated.sentinel_api_client.models.tool import Tool
+from sentinel.registration.helper import get_human_supervision_decision_api
 from .config import (
     SupervisionDecision,
     SupervisionDecisionType,
@@ -10,10 +11,9 @@ from .config import (
     PREFERRED_LLM_MODEL,
     ModifiedData,
 )
-import inspect
 import json
 from openai import OpenAI
-from inspect_ai.tool import ToolCall
+from openai.types.chat.chat_completion_message import ChatCompletionMessageToolCall
 
 client = OpenAI()
 
@@ -25,7 +25,7 @@ class ToolCallSupervisor(Protocol):
     def __call__(
         self,
         tool: Tool,
-        tool_call: dict,
+        tool_call: ChatCompletionMessageToolCall,
         supervision_context: SupervisionContext,
         ignored_attributes: list[str] = [],
         supervision_request_id: Optional[UUID] = None,
@@ -95,17 +95,19 @@ ModifiedData:
 
     def supervisor(
         tool: Tool,
+        tool_call: ChatCompletionMessageToolCall,
         supervision_context: SupervisionContext,
-        ignored_attributes: list[str],
-        tool_args: list[Any],
-        tool_kwargs: dict[str, Any],
-        decision: Optional[SupervisionDecision] = None,
+        ignored_attributes: list[str] = [],
+        supervision_request_id: Optional[UUID] = None,
+        previous_decision: Optional[SupervisionDecision] = None,
         **kwargs
     ) -> SupervisionDecision:
         """
         LLM supervisor that makes a decision based on the function call, its arguments, and the supervision instructions.
         """
         # Prepare tool arguments string
+        tool_args = []
+        tool_kwargs = json.loads(tool_call.function.arguments)
         tool_args_str = ", ".join([f"{i}: {repr(arg)}" for i, arg in enumerate(tool_args)])
         tool_kwargs_str = ", ".join(
             [f"{k}={repr(v)}" for k, v in tool_kwargs.items() if k not in ignored_attributes] +
@@ -123,8 +125,8 @@ ModifiedData:
         # Prepare the assistant's instructions
         instructions_content = "Instructions:\n" + instructions 
         
-        if decision is not None:
-            instructions_content += "\n\nDecision made by the previous supervisor:\nDecision: " + decision.decision + "\nExplanation: " + decision.explanation
+        if previous_decision is not None:
+            instructions_content += "\n\nDecision made by the previous supervisor:\nDecision: " + previous_decision.decision + "\nExplanation: " + str(previous_decision.explanation)
 
         if include_context and supervision_context:
             # Convert SupervisionContext into a textual description
@@ -241,53 +243,33 @@ def human_supervisor(
         Supervisor: A supervisor function that implements human supervision.
     """
     def supervisor(
-        func: Callable,
+        tool: Tool,
+        tool_call: ChatCompletionMessageToolCall,
         supervision_context: SupervisionContext,
-        ignored_attributes: list[str],
-        tool_args: list[Any],
-        tool_kwargs: dict[str, Any],
-        supervision_request_id: UUID,
-        decision: Optional[SupervisionDecision] = None,
+        ignored_attributes: list[str] = [],
+        supervision_request_id: Optional[UUID] = None,
+        previous_decision: Optional[SupervisionDecision] = None,
         **kwargs
     ) -> SupervisionDecision:
         """
         Human supervisor that requests approval via backend API or CLI.
 
         Args:
-            func (Callable): The function being supervised.
+            tool (Tool): The tool being supervised.
+            tool_call (ChatCompletionMessageToolCall): The tool call to be supervised.
             supervision_context (SupervisionContext): Additional context.
-            tool_args (List[Any]): Positional arguments for the function.
-            tool_kwargs (dict[str, Any]): Keyword arguments for the function.
+            ignored_attributes (List[str]): Attributes to ignore.
+            supervision_request_id (Optional[UUID]): ID of the supervision request.
+            previous_decision (Optional[SupervisionDecision]): Decision made by the previous supervisor.
 
         Returns:
             SupervisionDecision: The decision made by the supervisor.
         """
-        from .common import human_supervisor_wrapper
-        from .config import supervision_config
-
-        # Create TaskState from supervision_context
-        task_state = supervision_context.to_task_state()
-
-        # Create a ToolCall object representing the function call
-        tool_call = ToolCall(
-            id="tool_id",  # Use an appropriate ID if available
-            function=func.__qualname__,
-            arguments=tool_kwargs,
-            type='function'
-        )
-
-        # Initialize client if needed
-        client = supervision_config.client  # Assuming supervision_config is accessible
 
         # Get the human supervision decision
-        supervisor_decision = human_supervisor_wrapper(
-            task_state=task_state,
-            call=tool_call,
-            timeout=timeout,
-            use_inspect_ai=False,
-            n=n,
+        supervisor_decision = get_human_supervision_decision_api(
             supervision_request_id=supervision_request_id,
-            client=client
+            timeout=timeout,
         )
 
         return supervisor_decision
@@ -300,11 +282,12 @@ def human_supervisor(
 def auto_approve_supervisor() -> ToolCallSupervisor:
     """Creates a supervisor that automatically approves any input."""
     def supervisor(
-        func: Callable,
+        tool: Tool,
+        tool_call: ChatCompletionMessageToolCall,
         supervision_context: SupervisionContext,
-        ignored_attributes: list[str],
-        tool_args: list[Any],
-        tool_kwargs: dict[str, Any],
+        ignored_attributes: list[str] = [],
+        supervision_request_id: Optional[UUID] = None,
+        previous_decision: Optional[SupervisionDecision] = None,
         **kwargs
     ) -> SupervisionDecision:
         return SupervisionDecision(
@@ -316,13 +299,13 @@ def auto_approve_supervisor() -> ToolCallSupervisor:
     supervisor.supervisor_attributes = {}
     return supervisor
 
-def tool_supervisor(**config_kwargs) -> Callable:
+def tool_supervisor_decorator(**config_kwargs) -> Callable:
     """Decorator to create a supervisor function with arbitrary configuration parameters."""
     def decorator(func: Callable) -> ToolCallSupervisor:
         @wraps(func)
         def wrapper(
             tool: Tool,
-            tool_call: dict,
+            tool_call: ChatCompletionMessageToolCall,
             supervision_context: SupervisionContext,
             ignored_attributes: list[str] = [],
             supervision_request_id: Optional[UUID] = None,
@@ -342,3 +325,28 @@ def tool_supervisor(**config_kwargs) -> Callable:
             )
         return wrapper
     return decorator
+
+#TODO: Finish this decorator
+def chat_supervisor_decorator(**config_kwargs) -> Callable:
+    """Decorator to create a chat supervisor function with arbitrary configuration parameters."""
+    def decorator(func: Callable) -> ChatSupervisor:
+        @wraps(func)
+        def wrapper(
+            message: dict,
+            supervision_context: Optional[SupervisionContext] = None,
+            supervision_request_id: Optional[UUID] = None,
+            previous_decision: Optional[SupervisionDecision] = None,
+            **kwargs
+        ) -> SupervisionDecision:
+            # Pass the configuration parameters to the supervisor function
+            return func(
+                message=message,
+                supervision_context=supervision_context,
+                supervision_request_id=supervision_request_id,
+                previous_decision=previous_decision,
+                config_kwargs=config_kwargs,
+                **kwargs
+            )
+        return wrapper
+    return decorator
+

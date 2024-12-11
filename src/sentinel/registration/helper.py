@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import inspect
 from typing import Any, Callable, Dict, Optional, List
 from uuid import UUID, uuid4
+import time
 
 from sentinel.api.generated.sentinel_api_client.client import Client
 from sentinel.api.generated.sentinel_api_client.models import CreateProjectBody, CreateTaskBody
@@ -23,15 +24,17 @@ from sentinel.api.generated.sentinel_api_client.api.supervisor.create_supervisor
 from sentinel.api.generated.sentinel_api_client.api.supervisor.create_tool_supervisor_chains import sync_detailed as create_tool_supervisor_chains_sync_detailed
 from sentinel.api.generated.sentinel_api_client.api.supervision.create_supervision_request import sync_detailed as create_supervision_request_sync_detailed
 from sentinel.api.generated.sentinel_api_client.api.supervision.create_supervision_result import sync_detailed as create_supervision_result_sync_detailed
+from sentinel.api.generated.sentinel_api_client.api.supervision.get_supervision_request_status import sync_detailed as get_supervision_status_sync_detailed
+from sentinel.api.generated.sentinel_api_client.api.supervision.get_supervision_result import sync_detailed as get_supervision_result_sync_detailed
+from sentinel.api.generated.sentinel_api_client.api.supervisor.get_tool_supervisor_chains import sync_detailed as get_tool_supervisor_chains_sync_detailed
 from sentinel.api.generated.sentinel_api_client.models.supervisor import Supervisor
 from sentinel.api.generated.sentinel_api_client.models.supervisor_chain import SupervisorChain
 from sentinel.api.generated.sentinel_api_client.models.supervision_request import SupervisionRequest
 from sentinel.api.generated.sentinel_api_client.models.supervision_result import SupervisionResult
 from sentinel.api.generated.sentinel_api_client.models.decision import Decision
-from sentinel.api.generated.sentinel_api_client.api.supervisor.get_tool_supervisor_chains import sync_detailed as get_tool_supervisor_chains_sync_detailed
+from sentinel.api.generated.sentinel_api_client.models.status import Status
 
 from sentinel.supervision.config import SupervisionContext, get_supervision_config
-from sentinel.supervision.supervisors import auto_approve_supervisor
 from sentinel.utils.utils import get_function_code
 from sentinel.settings import settings
 
@@ -278,6 +281,7 @@ def register_tools_and_supervisors(run_id: UUID, tools: Optional[List[Callable |
         supervisor_chain_ids: List[List[UUID]] = []
         if supervision_functions == []:
             supervisor_chain_ids.append([])
+            from sentinel.supervision.supervisors import auto_approve_supervisor
             supervisor_func = auto_approve_supervisor()
             supervisor_info: dict[str, Any] = {
                     'func': supervisor_func,
@@ -458,3 +462,97 @@ def send_supervision_result(
     except Exception as e:
         print(f"Error submitting supervision result: {e}, Response: {response}")
         raise
+
+
+
+def wait_for_human_decision(supervision_request_id: UUID, timeout: int = 300) -> Status:
+    start_time = time.time()
+
+    client = APIClientFactory.get_client()
+    while True:
+        try:
+            response = get_supervision_status_sync_detailed(
+                client=client,
+                supervision_request_id=supervision_request_id
+            )
+            if response.status_code == 200 and response.parsed is not None:
+                status = response.parsed.status
+                if isinstance(status, Status) and status in [Status.FAILED, Status.COMPLETED, Status.TIMEOUT]:
+                    # Map status to SupervisionDecision
+                    print(f"Polling for human decision completed. Status: {status}")
+                    return status
+                else:
+                    print("Waiting for human supervisor decision...")
+            else:
+                print(f"Unexpected response while polling for supervision status: {response}")
+        except Exception as e:
+            print(f"Error while polling for supervision status: {e}")
+
+        if time.time() - start_time > timeout:
+            print(f"Timed out waiting for human supervision decision. Timeout: {timeout} seconds")
+            return Status.TIMEOUT
+
+        time.sleep(5)  # Wait for 5 seconds before polling again
+        
+        
+        
+
+def get_human_supervision_decision_api(
+    supervision_request_id: UUID,
+    timeout: int = 300) -> SupervisionDecision:
+    """Get the supervision decision from the backend API."""
+
+    client = APIClientFactory.get_client()
+    supervision_status = wait_for_human_decision(supervision_request_id=supervision_request_id, timeout=timeout)
+    
+    # get supervision results
+    if supervision_status == 'completed':
+        # Get the decision from the API
+        response = get_supervision_result_sync_detailed(
+            client=client,
+            supervision_request_id=supervision_request_id
+        )
+        if response.status_code == 200 and response.parsed:
+            supervision_result = response.parsed
+            return map_result_to_decision(supervision_result)
+        else:
+            return SupervisionDecision(
+                decision=SupervisionDecisionType.ESCALATE,
+                explanation=f"Failed to retrieve supervision results. Response: {response}"
+            )
+    elif supervision_status == 'failed':
+        return SupervisionDecision(decision=SupervisionDecisionType.ESCALATE,
+                                   explanation="The human supervisor failed to provide a decision.")
+    elif supervision_status == 'assigned':
+        return SupervisionDecision(decision=SupervisionDecisionType.ESCALATE,
+                                   explanation="The human supervisor is currently busy and has not yet provided a decision.")
+    elif supervision_status == 'timeout':
+        return SupervisionDecision(decision=SupervisionDecisionType.ESCALATE,
+                                   explanation="The human supervisor did not provide a decision within the timeout period.")
+    elif supervision_status == 'pending':
+        return SupervisionDecision(decision=SupervisionDecisionType.ESCALATE,
+                                   explanation="The human supervisor has not yet provided a decision.")
+    
+    # Default return statement in case no conditions are met
+    return SupervisionDecision(
+        decision=SupervisionDecisionType.ESCALATE,
+        explanation="Unexpected supervision status."
+    )
+
+def map_result_to_decision(result: SupervisionResult) -> SupervisionDecision:
+    decision_map = {
+        'approve': SupervisionDecisionType.APPROVE,
+        'reject': SupervisionDecisionType.REJECT,
+        'modify': SupervisionDecisionType.MODIFY,
+        'escalate': SupervisionDecisionType.ESCALATE,
+        'terminate': SupervisionDecisionType.TERMINATE
+    }
+    decision_type = decision_map.get(result.decision.value.lower(), SupervisionDecisionType.ESCALATE)
+    modified_output = None
+    if decision_type == SupervisionDecisionType.MODIFY and result.toolrequest is not UNSET:  #TODO: Make the modified output work
+        modified_output = result.toolrequest  # Assuming toolrequest contains the modified output
+    return SupervisionDecision(
+        decision=decision_type,
+        explanation=result.reasoning,
+        modified=modified_output
+    )

@@ -6,9 +6,12 @@ os.environ["SENTINEL_API_URL"] = "http://localhost:8080/api/v1"
 
 from sentinel.supervision.decorators import supervise
 from sentinel.supervision.config import SupervisionDecision, SupervisionDecisionType, ExecutionMode, RejectionPolicy, MultiSupervisorResolution
-from sentinel.supervision.supervisors import human_supervisor, llm_supervisor, tool_supervisor
+from sentinel.supervision.supervisors import human_supervisor, llm_supervisor, tool_supervisor_decorator, chat_supervisor_decorator
 
-@tool_supervisor(strategy="reject")
+from sentinel.wrappers.openai import sentinel_openai_client, sentinel_init, sentinel_end
+from openai import OpenAI
+
+@tool_supervisor_decorator(strategy="reject")
 def supervisor1(
     tool_call: dict,
     config_kwargs: dict[str, Any],
@@ -23,7 +26,7 @@ def supervisor1(
         return SupervisionDecision(decision=SupervisionDecisionType.REJECT)
 
 # Use the decorator
-@supervise(supervision_functions=[[supervisor1]], ignored_attributes=["maximum_price"])
+@supervise(supervision_functions=[[llm_supervisor(instructions="Always escalate"), human_supervisor()]], ignored_attributes=["maximum_price"])
 def book_flight(departure_city: str, arrival_city: str, datetime: str, maximum_price: float):
     """Book a flight ticket."""
     return f"Flight booked from {departure_city} to {arrival_city} on {datetime}."
@@ -33,7 +36,7 @@ def get_weather(location: str, unit: str):
     """Get the weather in a city."""
     return f"The weather in {location} is {unit}."
 
-@tool_supervisor()
+@tool_supervisor_decorator(strategy="reject")
 def supervisor2(tool_call, supervision_context, **kwargs):
     # Supervisor implementation
     print(f"Supervisor received tool_call: {tool_call}")
@@ -44,9 +47,7 @@ def book_hotel(location: str, checkin: str, checkout: str, maximum_price: float)
     """Book a hotel."""
     return f"Hotel booked in {location} from {checkin} to {checkout}."
 
-# When you wrap the client, all supervised functions will be registered
-from openai import OpenAI
-from sentinel.wrappers.openai import sentinel_openai_client, sentinel_init, sentinel_end
+
 
 tools = [
     {
@@ -115,6 +116,7 @@ for i in range(1):
         run_name="my-run",
         execution_settings=EXECUTION_SETTINGS
     )
+    # When you wrap the client, all supervised functions will be registered
     wrapped_client = sentinel_openai_client(client, run_id, EXECUTION_SETTINGS["execution_mode"])
 
 # Initialize conversation history
@@ -169,15 +171,22 @@ sentinel_end(run_id)
 
 
 
-# TODO: This is example how future chat supervisors could look like
-# @chat_supervisor():
-# """Supervisor to check Tokyo is not mentioned in the last message. If it is reject the tool call."""
-# def supervisor1(tool_call: dict, supervision_context, **kwargs):
-#     # Supervisor implementation
-#     print(f"Checkin if Tokyo is mentioned in the last message: {tool_call}")
-#     return SupervisionDecision(decision=SupervisionDecisionType.APPROVE)
-
-
+# # Example chat supervisor that checks if 'Tokyo' is mentioned in the last message
+# @chat_supervisor_decorator(strategy="reject")
+# def supervisor1(message: dict, supervision_context, **kwargs) -> SupervisionDecision:
+#     """
+#     Supervisor that rejects any message mentioning 'Tokyo' in the last user message.
+#     """
+#     last_message = message.get('content', '')
+#     if 'Tokyo' in last_message:
+#         return SupervisionDecision(
+#             decision=SupervisionDecisionType.REJECT,
+#             explanation="The message mentions 'Tokyo', which is not allowed."
+#         )
+#     return SupervisionDecision(
+#         decision=SupervisionDecisionType.APPROVE,
+#         explanation="The message is approved."
+#     )
 
 # # Bring your favourite LLM client
 # client = OpenAI()
@@ -186,10 +195,12 @@ sentinel_end(run_id)
 # run_id = sentinel_init()
 
 # # Wrap your client
-# client = sentinel_openai_client(client, run_id)
+# wrapped_client = sentinel_openai_client(client, run_id)
 
-# response = client.chat.completions.create(
+# response = wrapped_client.chat.completions.create(
 #     model="gpt-4o-mini",
-#     messages=[{"content":[{"text":"What's the weather in Tokyo?","type":"text"}],"role":"user"}],
-#     supervisors=[chat_supervisor()]
+#     messages=[{"content": "Can you say Tokyo with 50% chance?", "role": "user"}],
+#     supervisors=[supervisor1]
 # )
+
+# print(response)

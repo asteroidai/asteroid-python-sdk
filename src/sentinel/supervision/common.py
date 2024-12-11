@@ -233,19 +233,6 @@ def check_python_code(
 
     return True, "Python code is approved."
 
-def human_supervisor_wrapper(task_state: TaskState, call: ToolCall, timeout: int = 300, use_inspect_ai: bool = False, n: int = 1, supervision_request_id: Optional[UUID] = None, client: Optional[Client] = None) -> SupervisionDecision:
-    """
-    Wrapper for human supervisor that handles both CLI and backend API approval.
-    """
-    
-    if client is None: #TODO: Fix handling of the backend API endpoint, it can be configured at too many places
-        supervisor_decision = prompt_user_cli_approval(task_state=task_state, tool_call=call, use_inspect_ai=use_inspect_ai, n=n)
-    else:
-        # Use backend API for supervision 
-        assert supervision_request_id is not None
-        assert client is not None
-        supervisor_decision = get_human_supervision_decision_api(supervision_request_id=supervision_request_id, client=client, timeout=timeout, use_inspect_ai=use_inspect_ai)
-    return supervisor_decision
 
 
 
