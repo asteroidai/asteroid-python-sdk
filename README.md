@@ -1,25 +1,20 @@
 ### README.md
 
-# Sentinel Python SDK
-A Python SDK for interacting with the Sentinel platform.
+# Asteroid Python SDK
+A Python SDK for interacting with the Asteroid platform.
 
 ## Installation
 From the package:
 
 ```bash
-pip install sentinel-python-sdk
-```
-
-From the source:
-```bash
-pip install -e ".[dev]"
+pip install asteroid-sdk
 ```
 
 ## Quick Start
 ```python
-import sentinel
+import asteroid
 # Initialize the SDK
-sentinel.init(api_key="your_api_key")
+asteroid.init(api_key="your_api_key")
 # Use your LLM client as usual
 import openai
 response = openai.ChatCompletion.create(
@@ -31,7 +26,7 @@ print(response)
 
 # Development 
 
-This SDK makes use of a generated client from the OpenAPI spec. To update the spec, run the following command from the root of the repo (assuming that the OpenAPI spec is in the ../sentinel/server directory):
+This SDK makes use of a generated client from the OpenAPI spec. To update the spec, run the following command from the root of the repo (assuming that the OpenAPI spec is in the ../asteroid/server directory):
 
 First, install the openapi-python-client package https://github.com/openapi-generators/openapi-python-client
 ```bash
@@ -40,5 +35,5 @@ pip install openapi-python-client
 
 Then, generate the client:
 ```bash
-openapi-python-client generate --path ../sentinel/server/openapi.yaml  --output-path src/sentinel/api/generated --overwrite
+openapi-python-client generate --path ../asteroid/server/openapi.yaml  --output-path src/asteroid/api/generated --overwrite
 ```

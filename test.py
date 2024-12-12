@@ -2,16 +2,16 @@ import json
 import os
 from typing import Any
 
-os.environ["SENTINEL_API_URL"] = "http://localhost:8080/api/v1"
+os.environ["ASTEROID_API_URL"] = "http://localhost:8080/api/v1"
 
-from sentinel.supervision.decorators import supervise
-from sentinel.supervision.config import SupervisionDecision, SupervisionDecisionType, ExecutionMode, RejectionPolicy, MultiSupervisorResolution
-from sentinel.supervision.supervisors import human_supervisor, llm_supervisor, tool_supervisor_decorator, chat_supervisor_decorator
+from asteroid_sdk.supervision.decorators import supervise
+from asteroid_sdk.supervision.config import SupervisionDecision, SupervisionDecisionType, ExecutionMode, RejectionPolicy, MultiSupervisorResolution
+from asteroid_sdk.supervision.supervisors import human_supervisor, llm_supervisor, tool_supervisor_decorator, chat_supervisor_decorator
 
-from sentinel.wrappers.openai import sentinel_openai_client, sentinel_init, sentinel_end
+from asteroid_sdk.wrappers.openai import asteroid_openai_client, asteroid_init, asteroid_end
 from openai import OpenAI
 
-@tool_supervisor_decorator(strategy="reject")
+@tool_supervisor_decorator(strategy="reject") #TODO: Rethink the decorator design, it can't be configured with parameters in this way
 def supervisor1(
     tool_call: dict,
     config_kwargs: dict[str, Any],
@@ -110,18 +110,17 @@ EXECUTION_SETTINGS = {
 }
 
 for i in range(1):
-    run_id = sentinel_init(
+    run_id = asteroid_init(
         project_name="my-project", 
         task_name="my-task", 
         run_name="my-run",
         execution_settings=EXECUTION_SETTINGS
     )
     # When you wrap the client, all supervised functions will be registered
-    wrapped_client = sentinel_openai_client(client, run_id, EXECUTION_SETTINGS["execution_mode"])
+    wrapped_client = asteroid_openai_client(client, run_id, EXECUTION_SETTINGS["execution_mode"])
 
 # Initialize conversation history
 messages = []
-
 
 # Run 5 interactions
 for i in range(5):
@@ -167,13 +166,13 @@ for i in range(5):
                 "content": str(result)
             })
 
-sentinel_end(run_id)
+asteroid_end(run_id)
 
 
 
 # # Example chat supervisor that checks if 'Tokyo' is mentioned in the last message
 # @chat_supervisor_decorator(strategy="reject")
-# def supervisor1(message: dict, supervision_context, **kwargs) -> SupervisionDecision:
+# def chat_supervisor_1(message: dict, supervision_context, **kwargs) -> SupervisionDecision:
 #     """
 #     Supervisor that rejects any message mentioning 'Tokyo' in the last user message.
 #     """
@@ -188,19 +187,29 @@ sentinel_end(run_id)
 #         explanation="The message is approved."
 #     )
 
+# @chat_supervisor_decorator(strategy="allow")
+# def chat_supervisor_2(message: dict, supervision_context, **kwargs) -> SupervisionDecision:
+#     """
+#     Supervisor that allows any message.
+#     """
+#     return SupervisionDecision(
+#         decision=SupervisionDecisionType.APPROVE,
+#         explanation="The message is approved."
+#     )
+
 # # Bring your favourite LLM client
 # client = OpenAI()
 
-# # Initialize Sentinel
-# run_id = sentinel_init()
+# # Initialize Asteroid
+# run_id = asteroid_init(project_name="chat-supervisor-test", task_name="chat-supervisor-test", run_name="chat-supervisor-test")
 
 # # Wrap your client
-# wrapped_client = sentinel_openai_client(client, run_id)
+# wrapped_client = asteroid_openai_client(client, run_id, chat_supervisors=[chat_supervisor_1, chat_supervisor_2])
 
 # response = wrapped_client.chat.completions.create(
 #     model="gpt-4o-mini",
 #     messages=[{"content": "Can you say Tokyo with 50% chance?", "role": "user"}],
-#     supervisors=[supervisor1]
+#     supervisors=[supervisor1, supervisor2]
 # )
 
 # print(response)
