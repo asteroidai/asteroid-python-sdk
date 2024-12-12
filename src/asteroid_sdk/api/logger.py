@@ -106,12 +106,13 @@ class APILogger:
             messages = request_kwargs.get("messages", [])
             for idx, message in enumerate(messages):
                 if isinstance(message, ChatCompletionMessage):
-                    message = message.to_dict()
-                tool_calls = message.get("tool_calls", [])
-                if tool_calls:
-                    request_kwargs["messages"][idx]["tool_calls"] = [
-                        t.to_dict() if hasattr(t, 'to_dict') else t for t in tool_calls
-                    ]
+                    request_kwargs['messages'][idx] = message.to_dict()
+                else:
+                    tool_calls = message.get("tool_calls", [])
+                    if tool_calls:
+                        request_kwargs["messages"][idx]["tool_calls"] = [
+                            t.to_dict() if hasattr(t, 'to_dict') else t for t in tool_calls
+                        ]
             request_data_str = json.dumps(request_kwargs)
 
         return response_data_str, request_data_str
