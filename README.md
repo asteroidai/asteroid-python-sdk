@@ -1,4 +1,4 @@
-# Asteroid Python SDK
+# Asteroid Python SDK ☄️
 A Python SDK for interacting with the Asteroid platform. To successfully use Asteroid Python SDK, you need to have a running instance of the Asteroid server. [Book a demo]( https://calendly.com/founders-asteroid-hhaf/30min) with Asteroid founders to get started!
 
 
