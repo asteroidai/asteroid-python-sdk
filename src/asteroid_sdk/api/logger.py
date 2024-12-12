@@ -105,6 +105,8 @@ class APILogger:
             # Ensure tool_calls are converted to dictionaries
             messages = request_kwargs.get("messages", [])
             for idx, message in enumerate(messages):
+                if isinstance(message, ChatCompletionMessage):
+                    message = message.to_dict()
                 tool_calls = message.get("tool_calls", [])
                 if tool_calls:
                     request_kwargs["messages"][idx]["tool_calls"] = [

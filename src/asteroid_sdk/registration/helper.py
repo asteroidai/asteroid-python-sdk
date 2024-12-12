@@ -281,7 +281,7 @@ def register_tools_and_supervisors(run_id: UUID, tools: Optional[List[Callable |
         supervisor_chain_ids: List[List[UUID]] = []
         if supervision_functions == []:
             supervisor_chain_ids.append([])
-            from asteroid.supervision.supervisors import auto_approve_supervisor
+            from asteroid_sdk.supervision.supervisors import auto_approve_supervisor
             supervisor_func = auto_approve_supervisor()
             supervisor_info: dict[str, Any] = {
                     'func': supervisor_func,
