@@ -4,17 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["sentinel"]
+packages = ["asteroid_sdk"]
 
 [tool.setuptools.package-data]
-sentinel = ["py.typed"]  # If you want to support type hints
+asteroid_sdk = ["py.typed"]  # If you want to support type hints
 
 [project]
-name = "sentinel"
+name = "asteroid_sdk"
 version = "0.1.0"
-description = "A Python SDK for Sentinel"
+description = "A Python SDK for Asteroid"
 authors = [
-    { name = "Enrtropy Labs", email = "devs@entropy-labs.ai" }
+    { name = "Asteroid", email = "founders@asteroid.ai" }
 ]
 license = { file = "LICENSE" }
 readme = "README.md"
@@ -24,6 +24,6 @@ dependencies = [
     "anthropic>=0.3.0",
     "litellm>=0.1.0",
     "pydantic>=2.0.0",
-    "python-dotenv>=1.0.0"
+    "python-dotenv>=1.0.0",
     "inspect-ai>=0.3.49"
 ]
