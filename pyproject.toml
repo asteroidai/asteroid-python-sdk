@@ -4,14 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["asteroid_sdk"]
+packages = [
+    "asteroid_sdk",
+    "asteroid_sdk.supervision",
+    "asteroid_sdk.registration",
+    "asteroid_sdk.utils",
+    "asteroid_sdk.wrappers"
+]
 
 [tool.setuptools.package-data]
 asteroid_sdk = ["py.typed"]  # If you want to support type hints
 
 [project]
 name = "asteroid_sdk"
-version = "0.1.1"
+version = "0.1.3"
 description = "A Python SDK for Asteroid"
 authors = [
     { name = "Asteroid", email = "founders@asteroid.ai" }
