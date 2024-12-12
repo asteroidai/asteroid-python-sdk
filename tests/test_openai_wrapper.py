@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import MagicMock
-from sentinel.wrappers.openai import ChatCompletionWrapper, APILogger
+from asteroid_sdk.wrappers.openai import ChatCompletionWrapper, APILogger
 
 class TestChatCompletionWrapper(unittest.TestCase):
     def setUp(self):
