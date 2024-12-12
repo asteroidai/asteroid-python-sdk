@@ -1,5 +1,6 @@
 # Asteroid Python SDK
-A Python SDK for interacting with the Asteroid platform. This SDK is designed to be used with the Asteroid server.
+A Python SDK for interacting with the Asteroid platform. To successfully use Asteroid Python SDK, you need to have a running instance of the Asteroid server. [Book a demo]( https://calendly.com/founders-asteroid-hhaf/30min) with Asteroid founders to get started!
+
 
 ## Installation
 ```bash
@@ -34,8 +35,6 @@ response = wrapped_client.chat.completions.create(
 )
 # The response is supervised by Asteroid, check the web UI for the results and human review
 ```
-
-To successfully run this example, you need to have a running instance of the Asteroid server. [Book a demo]( https://calendly.com/founders-asteroid-hhaf/30min) with Asteroid founders to get started! 
 
 ## Documentation
 
