@@ -14,12 +14,14 @@ from openai.types.chat.chat_completion_message import (
     ChatCompletionMessage,
     ChatCompletionMessageToolCall,
 )
+
+from asteroid_sdk.api.api_logger import APILogger
 from asteroid_sdk.api.generated.asteroid_api_client import Client
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.create_new_chat import (
     sync_detailed as create_new_chat_sync_detailed,
 )
 from asteroid_sdk.api.generated.asteroid_api_client.api.tool import get_tool
-from asteroid_sdk.api.generated.asteroid_api_client.models import SentinelChat
+from asteroid_sdk.api.generated.asteroid_api_client.models import SentinelChat, ChatIds
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor_type import SupervisorType
 from asteroid_sdk.supervision.config import ExecutionMode
 from asteroid_sdk.api.generated.asteroid_api_client.models.tool import Tool
@@ -43,18 +45,17 @@ class AsteroidLoggingError(Exception):
     pass
 
 
-class APILogger:
+class AsteroidChatSupervisionManager:
     """Handles logging to the Asteroid API, including supervision and resampling."""
 
-    def __init__(self, api_key: str):
+    def __init__(self, client: Client, api_logger: APILogger):
         """
         Initialize the API logger with the given API key.
 
         :param api_key: The API key for authenticating with the Sentinel API.
         """
-        if not api_key:
-            raise ValueError("API key is required for logging")
-        self.client = Client(base_url=settings.api_url)
+        self.client = client
+        self.api_logger = api_logger
 
     def log_request(self, request_data: Dict[str, Any], run_id: UUID) -> None:
         """
@@ -66,80 +67,7 @@ class APILogger:
         """
         pass  # No action required.
 
-    def debug_print_raw_input(
-        self, response_data: Dict[str, Any], request_kwargs: Dict[str, Any]
-    ) -> None:
-        """
-        Print raw response and request data for debugging purposes.
-
-        :param response_data: The raw response data from the API.
-        :param request_kwargs: The request keyword arguments.
-        """
-        print(f"Raw response_data type: {type(response_data)}")
-        print(f"Raw response_data: {response_data}")
-        print(f"Raw request_data type: {type(request_kwargs)}")
-        print(f"Raw request_data: {request_kwargs}")
-
-    def convert_to_json(
-        self, response_data: Any, request_kwargs: Any
-    ) -> tuple[str, str]:
-        """
-        Convert the response and request data to JSON strings.
-
-        :param response_data: The response data to convert.
-        :param request_kwargs: The request keyword arguments to convert.
-        :return: A tuple containing the response and request data as JSON strings.
-        """
-        # Convert response_data to a JSON string
-        if hasattr(response_data, 'model_dump_json'):
-            response_data_str = response_data.model_dump_json()
-        elif hasattr(response_data, 'to_dict'):
-            response_data_str = json.dumps(response_data.to_dict())
-        else:
-            response_data_str = json.dumps(response_data)
-
-        # Convert request_kwargs to a JSON string
-        if isinstance(request_kwargs, str):
-            request_data_str = request_kwargs
-        else:
-            # Ensure tool_calls are converted to dictionaries
-            messages = request_kwargs.get("messages", [])
-            for idx, message in enumerate(messages):
-                if isinstance(message, ChatCompletionMessage):
-                    request_kwargs['messages'][idx] = message.to_dict()
-                else:
-                    tool_calls = message.get("tool_calls", [])
-                    if tool_calls:
-                        request_kwargs["messages"][idx]["tool_calls"] = [
-                            t.to_dict() if hasattr(t, 'to_dict') else t for t in tool_calls
-                        ]
-            request_data_str = json.dumps(request_kwargs)
-
-        return response_data_str, request_data_str
-
-    def encode_to_base64(
-        self, response_data_str: str, request_data_str: str
-    ) -> tuple[str, str]:
-        """
-        Encode the response and request JSON strings to Base64.
-
-        :param response_data_str: The response data as a JSON string.
-        :param request_data_str: The request data as a JSON string.
-        :return: A tuple containing the Base64-encoded response and request data.
-        """
-        # Ensure the data is a string
-        if not isinstance(response_data_str, str):
-            response_data_str = str(response_data_str)
-        if not isinstance(request_data_str, str):
-            request_data_str = str(request_data_str)
-
-        # Encode to Base64
-        response_data_base64 = base64.b64encode(response_data_str.encode()).decode()
-        request_data_base64 = base64.b64encode(request_data_str.encode()).decode()
-
-        return response_data_base64, request_data_base64
-
-    def log_response(
+    def handle_language_model_interaction(
         self,
         response: ChatCompletion,
         request_kwargs: Dict[str, Any],
@@ -163,33 +91,12 @@ class APILogger:
         :return: Potentially modified response after supervision and resampling, or None.
         """
         try:
-            # === Debug Step 1: Print raw input data ===
-            print("\n=== Debug Step 1: Raw Input ===")
-            # Convert response to dict if it's not already
             response_data = response if isinstance(response, dict) else response.to_dict()
-            self.debug_print_raw_input(response_data, request_kwargs)
-
-            # === Debug Step 2: JSON Conversion ===
-            print("\n=== Debug Step 2: JSON Conversion ===")
-            response_data_str, request_data_str = self.convert_to_json(response_data, request_kwargs)
-            print(f"Response JSON string type: {type(response_data_str)}")
-            print(f"Response JSON string: {response_data_str}")
-            print(f"Request JSON string type: {type(request_data_str)}")
-            print(f"Request JSON string: {request_data_str}")
-
-            # === Debug Step 3: Base64 Encoding ===
-            print("\n=== Debug Step 3: Base64 Encoding ===")
-            response_data_base64, request_data_base64 = self.encode_to_base64(response_data_str, request_data_str)
-            print(f"Response base64 type: {type(response_data_base64)}")
-            print(f"Response base64: {response_data_base64}")
-            print(f"Request base64 type: {type(request_data_base64)}")
-            print(f"Request base64: {request_data_base64}")
-
-            # Create the final payload to send to the Sentinel API
-            body = self.create_final_payload(response_data_base64, request_data_base64)
-
-            # Send the request to Asteroid API
-            create_new_chat_response = self.send_api_request(run_id, body)
+            create_new_chat_response = self.api_logger.log_llm_interaction(
+                response,
+                request_kwargs,
+                run_id,
+            )
             choice_ids = create_new_chat_response.choice_ids
 
             # Check for the presence of tool calls in the response
@@ -218,78 +125,18 @@ class APILogger:
             supervision_context.update_messages(request_kwargs['messages'])
 
             # Extract execution settings from the supervision configuration
-            allow_tool_modifications = supervision_config.execution_settings.get('allow_tool_modifications', False)
-            rejection_policy = supervision_config.execution_settings.get('rejection_policy', 'resample_with_feedback')
-            n_resamples = supervision_config.execution_settings.get('n_resamples', 3)
-            multi_supervisor_resolution = supervision_config.execution_settings.get('multi_supervisor_resolution', 'all_must_approve')
-            remove_feedback_from_context = supervision_config.execution_settings.get('remove_feedback_from_context', False)
 
-            new_response_messages: List[Any] = []
-
-            new_response = copy.deepcopy(response)
-            # Iterate over all the tool calls to process each one
-            for idx, tool_call in enumerate(response_data_tool_calls):
-                # Convert tool_call to ChatCompletionMessageToolCall if necessary
-                tool_call = ChatCompletionMessageToolCall(**tool_call)
-                tool_id = choice_ids[0].tool_call_ids[idx].tool_id
-                tool_call_id = choice_ids[0].tool_call_ids[idx].tool_call_id
-
-                # Process the tool call with supervision
-                processed_tool_call, all_decisions, modified = self.process_tool_call(
-                    tool_call=tool_call,
-                    tool_id=tool_id,
-                    tool_call_id=tool_call_id,
-                    supervision_context=supervision_context,
-                    allow_tool_modifications=allow_tool_modifications,
-                    multi_supervisor_resolution=multi_supervisor_resolution,
-                    execution_mode=execution_mode
-                )
-
-                if modified and processed_tool_call:
-                    # If the tool call was modified, run the supervision process again without modifications allowed
-                    final_tool_call, all_decisions, modified = self.process_tool_call(
-                        tool_call=processed_tool_call,
-                        tool_id=tool_id,
-                        tool_call_id=tool_call_id,
-                        supervision_context=supervision_context,
-                        allow_tool_modifications=False,
-                        multi_supervisor_resolution=multi_supervisor_resolution,
-                        execution_mode=execution_mode
-                    )
-                    new_response_messages.append(final_tool_call)
-                elif not processed_tool_call:
-                    # If the tool call was rejected, handle based on the rejection policy
-                    if rejection_policy == RejectionPolicy.RESAMPLE_WITH_FEEDBACK:
-                        # Attempt to resample the response with feedback
-                        resampled_response = self.handle_rejection_with_resampling(
-                            tool_call=tool_call,
-                            all_decisions=all_decisions,
-                            completions=completions,
-                            request_kwargs=request_kwargs,
-                            args=args,
-                            run_id=run_id,
-                            n_resamples=n_resamples,
-                            supervision_context=supervision_context,
-                            rejection_policy=rejection_policy,
-                            multi_supervisor_resolution=multi_supervisor_resolution,
-                            remove_feedback_from_context=remove_feedback_from_context,
-                            execution_mode=execution_mode
-                        )
-
-                        # If resampled response contains tool calls (ie it succeeded), then succeed
-                        if resampled_response and resampled_response.tool_calls:
-                            new_response.choices[0].message.tool_calls[idx] = resampled_response.tool_calls[0]
-                        else:
-                            # If resampled response doesn't contain tool calls (ie it failed), then overwrite the original message, with the failure
-                            new_response.choices[0] = resampled_response
-                    else:
-                        # Handle other rejection policies if necessary
-                        pass
-                else:
-                    # Approved tool call, add the original message tool call
-                    new_response.choices[0].message.tool_calls[idx] = processed_tool_call
+            new_response_messages = self.handle_tool_calls_from_llm_response(args, choice_ids, completions, execution_mode,
+                                                                             request_kwargs, response, response_data_tool_calls,
+                                                                             run_id, supervision_context)
 
             # Construct the new response with the potentially modified messages
+            new_response = copy.deepcopy(response)
+            for idx_message, message in enumerate(new_response_messages):
+                new_response.choices[idx_message].message = message
+
+            if execution_mode == ExecutionMode.MONITORING:
+                return response
             return new_response
         except Exception as e:
             # Handle exceptions and raise a custom error
@@ -301,6 +148,86 @@ class APILogger:
             else:
                 print("No traceback available.")
             raise AsteroidLoggingError(f"Failed to log response: {str(e)}") from e
+
+    def handle_tool_calls_from_llm_response(
+            self,
+            args: Any,
+            choice_ids: List[ChatIds],
+            completions,
+            execution_mode,
+            request_kwargs,
+            response,
+            response_data_tool_calls,
+            run_id: UUID,
+            supervision_context
+    ):
+        supervision_config = get_supervision_config()
+        allow_tool_modifications = supervision_config.execution_settings.get('allow_tool_modifications', False)
+        rejection_policy = supervision_config.execution_settings.get('rejection_policy', 'resample_with_feedback')
+        n_resamples = supervision_config.execution_settings.get('n_resamples', 3)
+        multi_supervisor_resolution = supervision_config.execution_settings.get('multi_supervisor_resolution', 'all_must_approve')
+        remove_feedback_from_context = supervision_config.execution_settings.get('remove_feedback_from_context', False)
+
+        new_response_messages: List[Any] = []
+        # Iterate over all the tool calls to process each one
+        for idx, tool_call in enumerate(response_data_tool_calls):
+            # Convert tool_call to ChatCompletionMessageToolCall if necessary
+            tool_call = ChatCompletionMessageToolCall(**tool_call)
+            tool_id = choice_ids[idx].tool_call_ids[0].tool_id
+            tool_call_id = choice_ids[idx].tool_call_ids[0].tool_call_id
+
+            # Process the tool call with supervision
+            processed_tool_call, all_decisions, modified = self.process_tool_call(
+                tool_call=tool_call,
+                tool_id=tool_id,
+                tool_call_id=tool_call_id,
+                supervision_context=supervision_context,
+                allow_tool_modifications=allow_tool_modifications,
+                multi_supervisor_resolution=multi_supervisor_resolution,
+                execution_mode=execution_mode
+            )
+
+            if modified and processed_tool_call:
+                # If the tool call was modified, run the supervision process again without modifications allowed
+                final_tool_call, all_decisions, modified = self.process_tool_call(
+                    tool_call=processed_tool_call,
+                    tool_id=tool_id,
+                    tool_call_id=tool_call_id,
+                    supervision_context=supervision_context,
+                    allow_tool_modifications=False,
+                    multi_supervisor_resolution=multi_supervisor_resolution,
+                    execution_mode=execution_mode
+                )
+                new_response_messages.append(final_tool_call)
+            elif not processed_tool_call:
+                # If the tool call was rejected, handle based on the rejection policy
+                if rejection_policy == RejectionPolicy.RESAMPLE_WITH_FEEDBACK:
+                    # Attempt to resample the response with feedback
+                    resampled_response = self.handle_rejection_with_resampling(
+                        tool_call=tool_call,
+                        all_decisions=all_decisions,
+                        completions=completions,
+                        request_kwargs=request_kwargs,
+                        args=args,
+                        run_id=run_id,
+                        n_resamples=n_resamples,
+                        supervision_context=supervision_context,
+                        rejection_policy=rejection_policy,
+                        multi_supervisor_resolution=multi_supervisor_resolution,
+                        remove_feedback_from_context=remove_feedback_from_context,
+                        execution_mode=execution_mode
+                    )
+                    if resampled_response:
+                        new_response_messages.append(resampled_response)
+                else:
+                    # Handle other rejection policies if necessary
+                    pass
+            else:
+                # Approved tool call, add the original message tool call
+                new_response_messages.append(response.choices[idx].message)
+
+        return new_response_messages
+
 
     def process_tool_call(
         self,
@@ -350,7 +277,7 @@ class APILogger:
 
         # Determine the outcome based on supervisor decisions
         if multi_supervisor_resolution == MultiSupervisorResolution.ALL_MUST_APPROVE and all(
-            decision.decision == SupervisionDecisionType.APPROVE for decision in final_supervisor_chain_decisions
+                decision.decision == SupervisionDecisionType.APPROVE for decision in final_supervisor_chain_decisions
         ):
             # Approved
             return tool_call, supervisor_chain_decisions, False
@@ -526,61 +453,6 @@ class APILogger:
 
         return decision
 
-    def create_final_payload(
-        self, response_data_base64: str, request_data_base64: str
-    ) -> SentinelChat:
-        """
-        Create the final payload for the API request.
-
-        :param response_data_base64: The response data encoded in Base64.
-        :param request_data_base64: The request data encoded in Base64.
-        :return: The SentinelChat object to send as the payload.
-        """
-        try:
-            body = SentinelChat(
-                response_data=response_data_base64,
-                request_data=request_data_base64
-            )
-            print(f"Final body object type: {type(body)}")
-            print(f"Final body object: {body}")
-            return body
-        except Exception as e:
-            print(f"Body creation error: {str(e)}")
-            print(f"Error occurred at line {e.__traceback__.tb_lineno}")
-            raise
-
-    def send_api_request(self, run_id: UUID, body: SentinelChat) -> Any:
-        """
-        Send the API request to the Asteroid API and handle the response.
-
-        :param run_id: The unique identifier for the run.
-        :param body: The payload to send to the API.
-        :return: The parsed response from the API.
-        """
-        try:
-            print(f"Sending request to Asteroid API with body: {body}")
-            response = create_new_chat_sync_detailed(
-                client=self.client,
-                run_id=run_id,
-                body=body
-            )
-            print(f"API Response status code: {response.status_code}")
-            print(f"API Response content: {response.content}")
-
-            if response.status_code not in [200, 201]:
-                raise ValueError(f"Failed to log LLM response. Status code: {response.status_code}, Response: {response.content}")
-
-            if response.parsed is None:
-                raise ValueError("Response was successful but parsed content is None")
-
-            print(f"Successfully logged response for run {run_id}")
-            print(f"Parsed response: {response.parsed}")
-            return response.parsed
-        except Exception as e:
-            print(f"API request error: {str(e)}")
-            print(f"Error occurred at line {e.__traceback__.tb_lineno}")
-            raise
-
     def handle_rejection_with_resampling(
         self,
         tool_call: ChatCompletionMessageToolCall,
@@ -620,19 +492,18 @@ class APILogger:
         for resample in range(n_resamples):
             # Add feedback to the context for all rejected, escalated and terminated supervisors
             feedback_from_supervisors = " ".join([
-                f"Chain {chain_number}: Supervisor {supervisor_number_in_chain}: Decision: {decision.decision}, Explanation: {decision.explanation} \n"
-                for chain_number, decisions_for_chain in enumerate(resampled_all_decisions)
-                for supervisor_number_in_chain, decision in enumerate(decisions_for_chain)
-                if decision.decision in [SupervisionDecisionType.REJECT, SupervisionDecisionType.ESCALATE, SupervisionDecisionType.TERMINATE]
+                f"Supervisor {idx}: Decision: {d.decision}, Explanation: {d.explanation} \n"
+                for idx, d in enumerate(resampled_all_decisions)
+                if d.decision in [SupervisionDecisionType.REJECT, SupervisionDecisionType.ESCALATE, SupervisionDecisionType.TERMINATE]
             ])
+
             # Create feedback message for the assistant
             tool_name = resampled_tool_call.function.name
             tool_kwargs = resampled_tool_call.function.arguments
             feedback_message = (
                 f"User tried to execute tool: {tool_name} with arguments: {tool_kwargs}, but it was rejected by some supervisors. \n"
                 f"{feedback_from_supervisors} \n"
-                f"Please try again with the feedback! \n"
-                f"Make sure to only return a single tool call!"
+                f"Please try again with the feedback!"
             )
 
             if "messages" in request_kwargs:
@@ -645,24 +516,17 @@ class APILogger:
 
             resampled_request_kwargs = copy.deepcopy(request_kwargs)
             resampled_request_kwargs["messages"] = updated_messages
-            # Ensures only one tool call is returned
-            resampled_request_kwargs["parallel_tool_calls"] = False
 
             # Send the updated messages to the model for resampling
             resampled_response = completions.create(*args, **resampled_request_kwargs)
 
             # Convert resampled response and request to JSON strings and Base64 encode
-            resampled_response_data_str, resampled_request_data_str = self.convert_to_json(
-                resampled_response.to_dict(), resampled_request_kwargs
-            )
-            resampled_response_data_base64, resampled_request_data_base64 = self.encode_to_base64(
-                resampled_response_data_str, resampled_request_data_str
-            )
-            body = self.create_final_payload(resampled_response_data_base64, resampled_request_data_base64)
 
-            # Send the resampled request to the Sentinel API
-            # TODO: Add some indication that it's sentinel message, e.g. role=sentinel
-            resampled_create_new_chat_response = self.send_api_request(run_id, body)
+            resampled_create_new_chat_response = self.api_logger.log_llm_interaction(
+                resampled_response,
+                resampled_request_kwargs,
+                run_id
+            )
 
             resampled_choice_ids = resampled_create_new_chat_response.choice_ids
 
@@ -671,8 +535,6 @@ class APILogger:
                 # TODO: If normal chat message is returned, we need to run chat supervisors if there are any
                 continue
 
-            # This will always be `tool_calls[0]` as we only have one tool call in resampled response. This is
-            # because we only allow one tool call per message.
             resampled_tool_call = resampled_response.choices[0].message.tool_calls[0]
             resampled_tool_call_id = resampled_choice_ids[0].tool_call_ids[0].tool_call_id
             resampled_tool_id = resampled_choice_ids[0].tool_call_ids[0].tool_id
@@ -695,7 +557,7 @@ class APILogger:
                 #     message["role"] = "sentinel"
                 return ChatCompletionMessage(
                     role="assistant",
-                    tool_calls=[processed_tool_call]
+                    tool_calls=[ChatCompletionMessageToolCall(**processed_tool_call)]
                 )
 
         # All resamples were rejected
