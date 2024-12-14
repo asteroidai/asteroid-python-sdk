@@ -201,7 +201,7 @@ class APILogger:
                 else:
                     print("No tool calls found in response, but chat supervisors provided, executing chat supervisors")
                     # TODO: Execute chat supervisors
-                    
+
             # Execute tool call supervisors
             # Retrieve the supervision configuration
             supervision_config = get_supervision_config()
@@ -334,7 +334,7 @@ class APILogger:
             return tool_call, None, False
 
         # Run all supervisors in the chains
-        all_decisions = self.run_supervisor_chains(
+        supervisor_chain_decisions = self.run_supervisor_chains(
             supervisors_chains=supervisors_chains,
             tool=tool,
             tool_call=tool_call,
@@ -344,19 +344,20 @@ class APILogger:
             execution_mode=execution_mode
         )
 
+        final_supervisor_chain_decisions = [chain_decisions[-1] for chain_decisions in supervisor_chain_decisions]
+
         # Determine the outcome based on supervisor decisions
         if multi_supervisor_resolution == MultiSupervisorResolution.ALL_MUST_APPROVE and all(
-            decision.decision in [SupervisionDecisionType.APPROVE] 
-            for decision in all_decisions
+            decision.decision == SupervisionDecisionType.APPROVE for decision in final_supervisor_chain_decisions
         ):
             # Approved
-            return tool_call, all_decisions, False
-        elif allow_tool_modifications and all_decisions[-1].decision == SupervisionDecisionType.MODIFY:
+            return tool_call, supervisor_chain_decisions, False
+        elif allow_tool_modifications and final_supervisor_chain_decisions[-1].decision == SupervisionDecisionType.MODIFY:
             # Modified
-            return all_decisions[-1].modified.openai_tool_call, all_decisions, True
+            return supervisor_chain_decisions[-1].modified.openai_tool_call, supervisor_chain_decisions, True
         else:
             # Rejected
-            return None, all_decisions, False
+            return None, supervisor_chain_decisions, False
 
     def get_tool(self, tool_id: UUID) -> Optional[Tool]:
         """
@@ -381,7 +382,7 @@ class APILogger:
         supervision_context: Any,
         multi_supervisor_resolution: str,
         execution_mode: str
-    ) -> List[SupervisionDecision]:
+    ) -> List[List[SupervisionDecision]]:
         """
         Run all supervisor chains for a tool call.
 
@@ -396,15 +397,15 @@ class APILogger:
         all_decisions = []
         for supervisor_chain in supervisors_chains:
             chain_decisions = self.run_supervisors_in_chain(
-                supervisor_chain=supervisor_chain, 
-                tool=tool, 
-                tool_call=tool_call, 
-                tool_call_id=tool_call_id, 
-                supervision_context=supervision_context, 
-                supervisor_chain_id=supervisor_chain.chain_id, 
+                supervisor_chain=supervisor_chain,
+                tool=tool,
+                tool_call=tool_call,
+                tool_call_id=tool_call_id,
+                supervision_context=supervision_context,
+                supervisor_chain_id=supervisor_chain.chain_id,
                 execution_mode=execution_mode
             )
-            all_decisions.extend(chain_decisions)
+            all_decisions.extend([chain_decisions])
             last_decision = chain_decisions[-1]
             if multi_supervisor_resolution == MultiSupervisorResolution.ALL_MUST_APPROVE and last_decision.decision in [
                 SupervisionDecisionType.ESCALATE,
@@ -497,8 +498,8 @@ class APILogger:
         if not supervisor_func:
             print(f"No local supervisor function found for ID {supervisor.id}. Skipping.")
             return None
-        
-        
+
+
         if supervisor.type == SupervisorType.HUMAN_SUPERVISOR and execution_mode == ExecutionMode.MONITORING:
             # If the supervisor is a human superviso and we are in monitoring mode, we automatically approve
             decision = SupervisionDecision(decision=SupervisionDecisionType.APPROVE)
@@ -664,7 +665,7 @@ class APILogger:
                 print("No tool calls found in resampled response, skipping supervision checks")
                 # TODO: If normal chat message is returned, we need to run chat supervisors if there are any
                 continue
-            
+
             resampled_tool_call = resampled_response.choices[0].message.tool_calls[0]
             resampled_tool_call_id = resampled_choice_ids[0].tool_call_ids[0].tool_call_id
             resampled_tool_id = resampled_choice_ids[0].tool_call_ids[0].tool_id
