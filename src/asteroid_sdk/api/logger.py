@@ -226,12 +226,13 @@ class APILogger:
 
             new_response_messages: List[Any] = []
 
+            new_response = copy.deepcopy(response)
             # Iterate over all the tool calls to process each one
             for idx, tool_call in enumerate(response_data_tool_calls):
                 # Convert tool_call to ChatCompletionMessageToolCall if necessary
                 tool_call = ChatCompletionMessageToolCall(**tool_call)
-                tool_id = choice_ids[idx].tool_call_ids[0].tool_id
-                tool_call_id = choice_ids[idx].tool_call_ids[0].tool_call_id
+                tool_id = choice_ids[0].tool_call_ids[idx].tool_id
+                tool_call_id = choice_ids[0].tool_call_ids[idx].tool_call_id
 
                 # Process the tool call with supervision
                 processed_tool_call, all_decisions, modified = self.process_tool_call(
@@ -274,20 +275,21 @@ class APILogger:
                             remove_feedback_from_context=remove_feedback_from_context,
                             execution_mode=execution_mode
                         )
-                        if resampled_response:
-                            new_response_messages.append(resampled_response)
+
+                        # If resampled response contains tool calls (ie it succeeded), then succeed
+                        if resampled_response and resampled_response.tool_calls:
+                            new_response.choices[0].message.tool_calls[idx] = resampled_response.tool_calls[0]
+                        else:
+                            # If resampled response doesn't contain tool calls (ie it failed), then overwrite the original message, with the failure
+                            new_response.choices[0] = resampled_response
                     else:
                         # Handle other rejection policies if necessary
                         pass
                 else:
                     # Approved tool call, add the original message tool call
-                    new_response_messages.append(response.choices[idx].message)
+                    new_response.choices[0].message.tool_calls[idx] = processed_tool_call
 
             # Construct the new response with the potentially modified messages
-            new_response = copy.deepcopy(response)
-            for idx_message, message in enumerate(new_response_messages):
-                new_response.choices[idx_message].message = message
-
             return new_response
         except Exception as e:
             # Handle exceptions and raise a custom error
@@ -618,18 +620,19 @@ class APILogger:
         for resample in range(n_resamples):
             # Add feedback to the context for all rejected, escalated and terminated supervisors
             feedback_from_supervisors = " ".join([
-                f"Supervisor {idx}: Decision: {d.decision}, Explanation: {d.explanation} \n"
-                for idx, d in enumerate(resampled_all_decisions)
-                if d.decision in [SupervisionDecisionType.REJECT, SupervisionDecisionType.ESCALATE, SupervisionDecisionType.TERMINATE]
+                f"Chain {chain_number}: Supervisor {supervisor_number_in_chain}: Decision: {decision.decision}, Explanation: {decision.explanation} \n"
+                for chain_number, decisions_for_chain in enumerate(resampled_all_decisions)
+                for supervisor_number_in_chain, decision in enumerate(decisions_for_chain)
+                if decision.decision in [SupervisionDecisionType.REJECT, SupervisionDecisionType.ESCALATE, SupervisionDecisionType.TERMINATE]
             ])
-
             # Create feedback message for the assistant
             tool_name = resampled_tool_call.function.name
             tool_kwargs = resampled_tool_call.function.arguments
             feedback_message = (
                 f"User tried to execute tool: {tool_name} with arguments: {tool_kwargs}, but it was rejected by some supervisors. \n"
                 f"{feedback_from_supervisors} \n"
-                f"Please try again with the feedback!"
+                f"Please try again with the feedback! \n"
+                f"Make sure to only return a single tool call!"
             )
 
             if "messages" in request_kwargs:
@@ -642,6 +645,8 @@ class APILogger:
 
             resampled_request_kwargs = copy.deepcopy(request_kwargs)
             resampled_request_kwargs["messages"] = updated_messages
+            # Ensures only one tool call is returned
+            resampled_request_kwargs["parallel_tool_calls"] = False
 
             # Send the updated messages to the model for resampling
             resampled_response = completions.create(*args, **resampled_request_kwargs)
@@ -666,6 +671,8 @@ class APILogger:
                 # TODO: If normal chat message is returned, we need to run chat supervisors if there are any
                 continue
 
+            # This will always be `tool_calls[0]` as we only have one tool call in resampled response. This is
+            # because we only allow one tool call per message.
             resampled_tool_call = resampled_response.choices[0].message.tool_calls[0]
             resampled_tool_call_id = resampled_choice_ids[0].tool_call_ids[0].tool_call_id
             resampled_tool_id = resampled_choice_ids[0].tool_call_ids[0].tool_id
@@ -688,7 +695,7 @@ class APILogger:
                 #     message["role"] = "sentinel"
                 return ChatCompletionMessage(
                     role="assistant",
-                    tool_calls=[ChatCompletionMessageToolCall(**processed_tool_call)]
+                    tool_calls=[processed_tool_call]
                 )
 
         # All resamples were rejected
