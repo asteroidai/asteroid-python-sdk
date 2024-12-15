@@ -13,7 +13,7 @@ from asteroid_sdk.api.supervision_runner import SupervisionRunner
 from asteroid_sdk.api.asteroid_chat_supervision_manager import AsteroidChatSupervisionManager, AsteroidLoggingError
 from asteroid_sdk.settings import settings
 from asteroid_sdk.registration.helper import create_run, register_project, register_task, register_tools_and_supervisors
-from asteroid_sdk.supervision.config import ExecutionMode
+from asteroid_sdk.supervision.config import ExecutionMode, RejectionPolicy
 import asyncio
 
 class CompletionsWrapper:
@@ -141,6 +141,12 @@ def asteroid_openai_client(
     except Exception as e:
         raise RuntimeError(f"Failed to wrap OpenAI client: {str(e)}") from e
 
+
+def check_config_validity(execution_settings):
+    if (execution_settings.get("execution_mode") == ExecutionMode.MONITORING
+            and execution_settings.get("rejection_policy") == RejectionPolicy.RESAMPLE_WITH_FEEDBACK):
+        raise ValueError("Monitoring mode does not support resample_with_feedback rejection policy")
+
 def asteroid_init(
     project_name: str = "My Project",
     task_name: str = "My Agent",
@@ -151,6 +157,7 @@ def asteroid_init(
     """
     Initializes supervision for a project, task, and run.
     """
+    check_config_validity(execution_settings)
 
     project_id = register_project(project_name)
     print(f"Registered new project '{project_name}' with ID: {project_id}")
