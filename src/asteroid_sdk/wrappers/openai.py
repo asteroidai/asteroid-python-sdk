@@ -9,6 +9,7 @@ from openai import OpenAIError
 
 from asteroid_sdk.api.api_logger import APILogger
 from asteroid_sdk.api.generated.asteroid_api_client import Client
+from asteroid_sdk.api.supervision_runner import SupervisionRunner
 from asteroid_sdk.api.asteroid_chat_supervision_manager import AsteroidChatSupervisionManager, AsteroidLoggingError
 from asteroid_sdk.settings import settings
 from asteroid_sdk.registration.helper import create_run, register_project, register_task, register_tools_and_supervisors
@@ -123,10 +124,11 @@ def asteroid_openai_client(
         # TODO - Clean up where this is instantiated
         client = Client(base_url=settings.api_url)
         api_logger = APILogger(client)
-        logger = AsteroidChatSupervisionManager(client, api_logger)
+        supervision_runner = SupervisionRunner(client, api_logger)
+        supervision_manager = AsteroidChatSupervisionManager(client, api_logger, supervision_runner)
         openai_client.chat.completions = CompletionsWrapper(
             openai_client.chat.completions,
-            logger,
+            supervision_manager,
             run_id,
             execution_mode
         )
