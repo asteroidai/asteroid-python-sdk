@@ -31,6 +31,11 @@ class CompletionsWrapper:
         self.execution_mode = execution_mode
 
     def create(self, *args, chat_supervisors: Optional[List[Callable]] = None, **kwargs) -> Any:
+        # If parallel tool calls not set to false (or doesn't exist, defaulting to true), then raise an error.
+        # Parallel tool calls do not work at the moment due to conflicts when trying to 'resample'
+        if kwargs.get("parallel_tool_calls", True):
+            raise ValueError("Parallel tool calls are not supported, Please turn them off by setting 'parallel_tool_calls=False' in your request.")
+
         if self.execution_mode == ExecutionMode.MONITORING:
             # Run in async mode
             return asyncio.run(self.create_async(*args, chat_supervisors=chat_supervisors, **kwargs))
