@@ -136,14 +136,18 @@ for i in range(5):
         messages=messages,
         tools=tools,
         tool_choice="auto",
-        temperature=1.5,
-        n=1
+        temperature=0,
+        n=1,
+        parallel_tool_calls=False
     )
 
     assistant_message = response.choices[0].message
 
     # Add assistant's response to conversation history
     messages.append({"role": "assistant", "content": assistant_message.content, "tool_calls": assistant_message.tool_calls})
+
+    if assistant_message.content:
+        print(f"Assistant: {assistant_message.content}")
 
     # If there are tool calls, execute them and add their results to the conversation
     if assistant_message.tool_calls:
@@ -152,6 +156,8 @@ for i in range(5):
             function_args = json.loads(tool_call.function.arguments)
 
             # Execute the function
+            print(f"Executing function: {function_name} with args: {function_args}")
+
             if function_name == "get_weather":
                 result = get_weather(**function_args)
             elif function_name == "book_flight":
@@ -159,6 +165,7 @@ for i in range(5):
             elif function_name == "book_hotel":
                 result = book_hotel(**function_args)
 
+            print(f"Function result: {result}")
             # Add the function response to messages
             messages.append({
                 "role": "tool",
