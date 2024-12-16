@@ -6,16 +6,16 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...models.asteroid_chat import AsteroidChat
 from ...models.chat_ids import ChatIds
 from ...models.error_response import ErrorResponse
-from ...models.sentinel_chat import SentinelChat
 from ...types import Response
 
 
 def _get_kwargs(
     run_id: UUID,
     *,
-    body: SentinelChat,
+    body: AsteroidChat,
 ) -> Dict[str, Any]:
     headers: Dict[str, Any] = {}
 
@@ -69,13 +69,13 @@ def sync_detailed(
     run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: SentinelChat,
+    body: AsteroidChat,
 ) -> Response[Union[ChatIds, ErrorResponse]]:
     """Create a new chat completion request from an existing run
 
     Args:
         run_id (UUID):
-        body (SentinelChat): The raw b64 encoded JSON of the request and response data
+        body (AsteroidChat): The raw b64 encoded JSON of the request and response data
             sent/received from the LLM.
 
     Raises:
@@ -102,13 +102,13 @@ def sync(
     run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: SentinelChat,
+    body: AsteroidChat,
 ) -> Optional[Union[ChatIds, ErrorResponse]]:
     """Create a new chat completion request from an existing run
 
     Args:
         run_id (UUID):
-        body (SentinelChat): The raw b64 encoded JSON of the request and response data
+        body (AsteroidChat): The raw b64 encoded JSON of the request and response data
             sent/received from the LLM.
 
     Raises:
@@ -130,13 +130,13 @@ async def asyncio_detailed(
     run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: SentinelChat,
+    body: AsteroidChat,
 ) -> Response[Union[ChatIds, ErrorResponse]]:
     """Create a new chat completion request from an existing run
 
     Args:
         run_id (UUID):
-        body (SentinelChat): The raw b64 encoded JSON of the request and response data
+        body (AsteroidChat): The raw b64 encoded JSON of the request and response data
             sent/received from the LLM.
 
     Raises:
@@ -161,13 +161,13 @@ async def asyncio(
     run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: SentinelChat,
+    body: AsteroidChat,
 ) -> Optional[Union[ChatIds, ErrorResponse]]:
     """Create a new chat completion request from an existing run
 
     Args:
         run_id (UUID):
-        body (SentinelChat): The raw b64 encoded JSON of the request and response data
+        body (AsteroidChat): The raw b64 encoded JSON of the request and response data
             sent/received from the LLM.
 
     Raises:

@@ -25,7 +25,7 @@ class Supervisor:
         created_at (datetime.datetime):
         type (SupervisorType): The type of supervisor. ClientSupervisor means that the supervision is done client side
             and the server is merely informed. Other supervisor types are handled serverside, e.g. HumanSupervisor means
-            that a human will review the request via the Sentinel UI.
+            that a human will review the request via the Asteroid UI.
         code (str):
         attributes (SupervisorAttributes):
         id (Union[Unset, UUID]):

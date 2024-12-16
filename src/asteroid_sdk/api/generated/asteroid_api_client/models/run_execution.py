@@ -6,8 +6,8 @@ from attrs import field as _attrs_field
 from ..models.status import Status
 
 if TYPE_CHECKING:
+    from ..models.asteroid_tool_call import AsteroidToolCall
     from ..models.chain_execution_state import ChainExecutionState
-    from ..models.tool_call import ToolCall
 
 
 T = TypeVar("T", bound="RunExecution")
@@ -17,12 +17,12 @@ T = TypeVar("T", bound="RunExecution")
 class RunExecution:
     """
     Attributes:
-        toolcall (ToolCall):
+        toolcall (AsteroidToolCall):
         chains (List['ChainExecutionState']):
         status (Status):
     """
 
-    toolcall: "ToolCall"
+    toolcall: "AsteroidToolCall"
     chains: List["ChainExecutionState"]
     status: Status
     additional_properties: Dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -51,11 +51,11 @@ class RunExecution:
 
     @classmethod
     def from_dict(cls: Type[T], src_dict: Dict[str, Any]) -> T:
+        from ..models.asteroid_tool_call import AsteroidToolCall
         from ..models.chain_execution_state import ChainExecutionState
-        from ..models.tool_call import ToolCall
 
         d = src_dict.copy()
-        toolcall = ToolCall.from_dict(d.pop("toolcall"))
+        toolcall = AsteroidToolCall.from_dict(d.pop("toolcall"))
 
         chains = []
         _chains = d.pop("chains")

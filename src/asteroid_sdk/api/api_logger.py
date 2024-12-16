@@ -11,7 +11,7 @@ from asteroid_sdk.api.generated.asteroid_api_client import Client
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.create_new_chat import (
     sync_detailed as create_new_chat_sync_detailed,
 )
-from asteroid_sdk.api.generated.asteroid_api_client.models import SentinelChat, ChatIds
+from asteroid_sdk.api.generated.asteroid_api_client.models import ChatIds, AsteroidChat, ChatFormat
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_message import (
     ChatCompletionMessage,
@@ -34,14 +34,15 @@ class APILogger:
         response_data_str, request_data_str = self._convert_to_json(response_data, request_kwargs)
         response_data_base64, request_data_base64 = self._encode_to_base64(response_data_str, request_data_str)
 
-        body = SentinelChat(
+        body = AsteroidChat(
             response_data=response_data_base64,
-            request_data=request_data_base64
+            request_data=request_data_base64,
+            format_=ChatFormat.OPENAI
         )
 
         return self._send_chats_to_asteroid_api(run_id, body)
 
-    def _send_chats_to_asteroid_api(self, run_id: UUID, body: SentinelChat) -> ChatIds:
+    def _send_chats_to_asteroid_api(self, run_id: UUID, body: AsteroidChat) -> ChatIds:
         """
         Send the API request to the Asteroid API and handle the response.
 

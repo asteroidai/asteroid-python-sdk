@@ -1,15 +1,14 @@
-from typing import TYPE_CHECKING, Any, Dict, List, Type, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Type, TypeVar
 from uuid import UUID
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
 if TYPE_CHECKING:
+    from ..models.asteroid_message import AsteroidMessage
+    from ..models.asteroid_tool_call import AsteroidToolCall
     from ..models.chain_execution_state import ChainExecutionState
     from ..models.supervision_request import SupervisionRequest
-    from ..models.tool_call import ToolCall
 
 
 T = TypeVar("T", bound="ReviewPayload")
@@ -22,14 +21,16 @@ class ReviewPayload:
     Attributes:
         supervision_request (SupervisionRequest):
         chain_state (ChainExecutionState):
+        toolcall (AsteroidToolCall):
         run_id (UUID): The ID of the run this review is for
-        toolcall (Union[Unset, ToolCall]):
+        messages (List['AsteroidMessage']): The messages in the run
     """
 
     supervision_request: "SupervisionRequest"
     chain_state: "ChainExecutionState"
+    toolcall: "AsteroidToolCall"
     run_id: UUID
-    toolcall: Union[Unset, "ToolCall"] = UNSET
+    messages: List["AsteroidMessage"]
     additional_properties: Dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -37,11 +38,14 @@ class ReviewPayload:
 
         chain_state = self.chain_state.to_dict()
 
+        toolcall = self.toolcall.to_dict()
+
         run_id = str(self.run_id)
 
-        toolcall: Union[Unset, Dict[str, Any]] = UNSET
-        if not isinstance(self.toolcall, Unset):
-            toolcall = self.toolcall.to_dict()
+        messages = []
+        for messages_item_data in self.messages:
+            messages_item = messages_item_data.to_dict()
+            messages.append(messages_item)
 
         field_dict: Dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -49,39 +53,43 @@ class ReviewPayload:
             {
                 "supervision_request": supervision_request,
                 "chain_state": chain_state,
+                "toolcall": toolcall,
                 "run_id": run_id,
+                "messages": messages,
             }
         )
-        if toolcall is not UNSET:
-            field_dict["toolcall"] = toolcall
 
         return field_dict
 
     @classmethod
     def from_dict(cls: Type[T], src_dict: Dict[str, Any]) -> T:
+        from ..models.asteroid_message import AsteroidMessage
+        from ..models.asteroid_tool_call import AsteroidToolCall
         from ..models.chain_execution_state import ChainExecutionState
         from ..models.supervision_request import SupervisionRequest
-        from ..models.tool_call import ToolCall
 
         d = src_dict.copy()
         supervision_request = SupervisionRequest.from_dict(d.pop("supervision_request"))
 
         chain_state = ChainExecutionState.from_dict(d.pop("chain_state"))
 
+        toolcall = AsteroidToolCall.from_dict(d.pop("toolcall"))
+
         run_id = UUID(d.pop("run_id"))
 
-        _toolcall = d.pop("toolcall", UNSET)
-        toolcall: Union[Unset, ToolCall]
-        if isinstance(_toolcall, Unset):
-            toolcall = UNSET
-        else:
-            toolcall = ToolCall.from_dict(_toolcall)
+        messages = []
+        _messages = d.pop("messages")
+        for messages_item_data in _messages:
+            messages_item = AsteroidMessage.from_dict(messages_item_data)
+
+            messages.append(messages_item)
 
         review_payload = cls(
             supervision_request=supervision_request,
             chain_state=chain_state,
-            run_id=run_id,
             toolcall=toolcall,
+            run_id=run_id,
+            messages=messages,
         )
 
         review_payload.additional_properties = d

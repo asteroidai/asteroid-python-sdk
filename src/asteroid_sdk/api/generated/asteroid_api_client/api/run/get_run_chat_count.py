@@ -1,47 +1,36 @@
 from http import HTTPStatus
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, cast
 from uuid import UUID
 
 import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.asteroid_tool_call import AsteroidToolCall
-from ...models.error_response import ErrorResponse
 from ...types import Response
 
 
 def _get_kwargs(
-    tool_call_id: UUID,
+    run_id: UUID,
 ) -> Dict[str, Any]:
     _kwargs: Dict[str, Any] = {
         "method": "get",
-        "url": f"/tool_call/{tool_call_id}",
+        "url": f"/run/{run_id}/chat_count",
     }
 
     return _kwargs
 
 
-def _parse_response(
-    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[Union[AsteroidToolCall, ErrorResponse]]:
+def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[int]:
     if response.status_code == 200:
-        response_200 = AsteroidToolCall.from_dict(response.json())
-
+        response_200 = cast(int, response.json())
         return response_200
-    if response.status_code == 404:
-        response_404 = ErrorResponse.from_dict(response.json())
-
-        return response_404
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
     else:
         return None
 
 
-def _build_response(
-    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[Union[AsteroidToolCall, ErrorResponse]]:
+def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[int]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -51,25 +40,25 @@ def _build_response(
 
 
 def sync_detailed(
-    tool_call_id: UUID,
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[Union[AsteroidToolCall, ErrorResponse]]:
-    """Get a tool call
+) -> Response[int]:
+    """Count the number of chat entries for a run
 
     Args:
-        tool_call_id (UUID):
+        run_id (UUID):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[AsteroidToolCall, ErrorResponse]]
+        Response[int]
     """
 
     kwargs = _get_kwargs(
-        tool_call_id=tool_call_id,
+        run_id=run_id,
     )
 
     response = client.get_httpx_client().request(
@@ -80,49 +69,49 @@ def sync_detailed(
 
 
 def sync(
-    tool_call_id: UUID,
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[Union[AsteroidToolCall, ErrorResponse]]:
-    """Get a tool call
+) -> Optional[int]:
+    """Count the number of chat entries for a run
 
     Args:
-        tool_call_id (UUID):
+        run_id (UUID):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[AsteroidToolCall, ErrorResponse]
+        int
     """
 
     return sync_detailed(
-        tool_call_id=tool_call_id,
+        run_id=run_id,
         client=client,
     ).parsed
 
 
 async def asyncio_detailed(
-    tool_call_id: UUID,
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[Union[AsteroidToolCall, ErrorResponse]]:
-    """Get a tool call
+) -> Response[int]:
+    """Count the number of chat entries for a run
 
     Args:
-        tool_call_id (UUID):
+        run_id (UUID):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[AsteroidToolCall, ErrorResponse]]
+        Response[int]
     """
 
     kwargs = _get_kwargs(
-        tool_call_id=tool_call_id,
+        run_id=run_id,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -131,26 +120,26 @@ async def asyncio_detailed(
 
 
 async def asyncio(
-    tool_call_id: UUID,
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[Union[AsteroidToolCall, ErrorResponse]]:
-    """Get a tool call
+) -> Optional[int]:
+    """Count the number of chat entries for a run
 
     Args:
-        tool_call_id (UUID):
+        run_id (UUID):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[AsteroidToolCall, ErrorResponse]
+        int
     """
 
     return (
         await asyncio_detailed(
-            tool_call_id=tool_call_id,
+            run_id=run_id,
             client=client,
         )
     ).parsed
