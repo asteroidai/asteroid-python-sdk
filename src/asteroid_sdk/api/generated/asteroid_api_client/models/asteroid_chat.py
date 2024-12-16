@@ -1,48 +1,42 @@
-from typing import TYPE_CHECKING, Any, Dict, List, Type, TypeVar
+from typing import Any, Dict, List, Type, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-if TYPE_CHECKING:
-    from ..models.arguments import Arguments
+from ..models.chat_format import ChatFormat
 
-
-T = TypeVar("T", bound="ToolChoice")
+T = TypeVar("T", bound="AsteroidChat")
 
 
 @_attrs_define
-class ToolChoice:
-    """
+class AsteroidChat:
+    """The raw b64 encoded JSON of the request and response data sent/received from the LLM.
+
     Attributes:
-        id (str):
-        function (str):
-        arguments (Arguments):
-        type (str):
+        request_data (str):
+        response_data (str):
+        format_ (ChatFormat):
     """
 
-    id: str
-    function: str
-    arguments: "Arguments"
-    type: str
+    request_data: str
+    response_data: str
+    format_: ChatFormat
     additional_properties: Dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
-        id = self.id
+        request_data = self.request_data
 
-        function = self.function
+        response_data = self.response_data
 
-        arguments = self.arguments.to_dict()
-
-        type = self.type
+        format_ = self.format_.value
 
         field_dict: Dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
             {
-                "id": id,
-                "function": function,
-                "arguments": arguments,
-                "type": type,
+                "request_data": request_data,
+                "response_data": response_data,
+                "format": format_,
             }
         )
 
@@ -50,26 +44,21 @@ class ToolChoice:
 
     @classmethod
     def from_dict(cls: Type[T], src_dict: Dict[str, Any]) -> T:
-        from ..models.arguments import Arguments
-
         d = src_dict.copy()
-        id = d.pop("id")
+        request_data = d.pop("request_data")
 
-        function = d.pop("function")
+        response_data = d.pop("response_data")
 
-        arguments = Arguments.from_dict(d.pop("arguments"))
+        format_ = ChatFormat(d.pop("format"))
 
-        type = d.pop("type")
-
-        tool_choice = cls(
-            id=id,
-            function=function,
-            arguments=arguments,
-            type=type,
+        asteroid_chat = cls(
+            request_data=request_data,
+            response_data=response_data,
+            format_=format_,
         )
 
-        tool_choice.additional_properties = d
-        return tool_choice
+        asteroid_chat.additional_properties = d
+        return asteroid_chat
 
     @property
     def additional_keys(self) -> List[str]:

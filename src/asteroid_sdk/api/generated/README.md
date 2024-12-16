@@ -1,5 +1,5 @@
 # asteroid-api-client
-A client library for accessing asteroid API
+A client library for accessing Asteroid API
 
 ## Usage
 First, create a client:

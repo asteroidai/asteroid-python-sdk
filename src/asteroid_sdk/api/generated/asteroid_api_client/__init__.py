@@ -1,4 +1,4 @@
-"""A client library for accessing Sentinel API"""
+"""A client library for accessing Asteroid API"""
 
 from .client import AuthenticatedClient, Client
 

@@ -1,26 +1,18 @@
-import random
-import json
 import copy
-
-from typing import Any, Callable, Dict, List, Optional, Literal
+import json
+import random
 from enum import Enum
-from pydantic import BaseModel, Field
 from threading import Lock
-from uuid import UUID, uuid4
+from typing import Any, Callable, Dict, List, Optional
+from uuid import UUID
 
-from asteroid_sdk.converters.inspect_ai_converters import convert_message, convert_task_state
-from asteroid_sdk.converters.message_converters import convert_anthropic_message, convert_openai_message
-from asteroid_sdk.supervision.langchain.utils import extract_messages_from_events
-from asteroid_sdk.api.generated.asteroid_api_client.models.task_state import TaskState as APITaskState
-from asteroid_sdk.api.generated.asteroid_api_client.models.message import Message
-from asteroid_sdk.api.generated.asteroid_api_client.models.output import Output as ApiOutput
-from asteroid_sdk.mocking.policies import MockPolicy
-from openai.types.chat.chat_completion_message import ChatCompletionMessageToolCall
-from asteroid_sdk.api.generated.asteroid_api_client.types import UNSET
-
+from inspect_ai.model import ChatMessage, ChatMessageAssistant
 from inspect_ai.solver import TaskState
 from inspect_ai.tool import ToolCall
-from inspect_ai.model import ChatMessage, ChatMessageAssistant
+from openai.types.chat.chat_completion_message import ChatCompletionMessageToolCall
+from pydantic import BaseModel, Field
+
+from asteroid_sdk.mocking.policies import MockPolicy
 
 PREFERRED_LLM_MODEL = "gpt-4o"
 DEFAULT_RUN_NAME = "default"
@@ -35,7 +27,7 @@ class SupervisionDecisionType(str, Enum):
 class ExecutionMode(str, Enum):
     MONITORING = "monitoring"
     SUPERVISION = "supervision"
-    
+
 class RejectionPolicy(str, Enum):
     RESAMPLE_WITH_FEEDBACK = "resample_with_feedback"
 
@@ -49,10 +41,10 @@ class ModifiedData(BaseModel):
 
     tool_kwargs: Optional[Dict[str, Any]] = None
     """Modified keyword arguments for the tool/function."""
-    
+
     original_inspect_ai_call: Optional[ToolCall] = None
     """Original InspectAI call that was modified."""
-    
+
     openai_tool_call: Optional[ChatCompletionMessageToolCall] = None
     """New OpenAI tool call that was createdcreated."""
     #TODO: Update to support changing the tool call itself
@@ -104,7 +96,7 @@ class SupervisionContext:
             if self.inspect_ai_state:
                 inspect_ai_text = self._describe_inspect_ai_state()
                 texts.append(inspect_ai_text)
-                
+
             # Process OpenAI messages if any
             if self.openai_messages:
                 openai_text = self._describe_openai_messages()
@@ -123,7 +115,7 @@ class SupervisionContext:
         """Converts the inspect_ai_state into a textual description."""
         state = self.inspect_ai_state
         texts = []
-        
+
         if state is None:
             return ""
 
@@ -168,15 +160,6 @@ class SupervisionContext:
         )
         return description
 
-    def _describe_openai_messages(self) -> str:
-        """Converts the OpenAI messages into a textual description."""
-        messages = [convert_openai_message(msg) for msg in self.openai_messages]
-        texts = []
-        texts.append("## OpenAI Messages:")
-        for message in messages:
-            message_text = self._describe_chat_message(message)
-            texts.append(message_text)
-        return "\n\n".join(texts)
 
     # Methods to manage the supervised functions registry
     def add_supervised_function(
@@ -201,7 +184,7 @@ class SupervisionContext:
     def get_supervised_function_entry(self, func_name: str) -> Optional[Dict[str, Any]]:
         with self.lock:
             return self.supervised_functions_registry.get(func_name)
-    
+
     def get_supervised_functions(self) -> List[Callable]:
         with self.lock:
             return list(self.supervised_functions_registry.values())
@@ -231,82 +214,6 @@ class SupervisionContext:
         with self.lock:
             return self.registered_supervisors.get(supervisor_name)
 
-    def to_task_state(self) -> APITaskState:
-        """Converts the supervision context into the API client's TaskState model."""
-        if self.inspect_ai_state:
-            return convert_task_state(self.inspect_ai_state)
-        elif self.openai_messages: #TODO: this is when user uses directly openai messages, update
-            # Convert OpenAI messages to TaskState
-            messages = [convert_openai_message(msg) for msg in self.openai_messages]
-            empty_output = ApiOutput(
-                    model=UNSET,
-                    choices=UNSET,
-                    usage=UNSET
-    )
-            return APITaskState(
-                    messages=messages,
-                    tools=[],
-                    output=empty_output,
-                    completed=False,
-                    tool_choice=UNSET,
-                )
-        
-        elif self.anthropic_messages:
-            empty_output = ApiOutput(
-                    model=UNSET,
-                    choices=UNSET,
-                    usage=UNSET
-    )
-            return APITaskState(
-                messages=[convert_anthropic_message(msg) for msg in self.anthropic_messages],
-                tools=[],
-                output=empty_output,
-                completed=False,
-                tool_choice=UNSET,
-            )
-        
-        elif self.langchain_events:
-            messages = extract_messages_from_events(self.langchain_events)
-
-            # Create your custom TaskState object
-            # TODO: Initialize direct API TaskState ?
-            task_state = TaskState(
-                model='model_name',  # TODO: Update with actual model name
-                sample_id=str(uuid4()),
-                epoch=1,
-                input=messages[0].content if messages else "",
-                messages=messages,
-                completed=False,
-                metadata={}
-            )
-            return convert_task_state(task_state)
-        else:
-            # Handle case when no messages are available
-            return APITaskState(
-                messages=[],
-                tools=[],
-                output=None,
-                completed=False,
-                tool_choice=None,
-            )
-        
-    def get_api_messages(self) -> List[Message]:
-        """Get the messages from the supervision context in the API client's Message model."""
-        if self.openai_messages:
-            # Convert OpenAI messages to ChatMessage objects
-            return [convert_openai_message(msg) for msg in self.openai_messages]
-        elif self.anthropic_messages:
-            return [convert_anthropic_message(msg) for msg in self.anthropic_messages]
-        elif self.langchain_events:
-            # Extract messages from LangChain events
-            return [convert_message(msg) for msg in extract_messages_from_events(self.langchain_events)]
-        elif self.inspect_ai_state:
-            # Use messages from inspect_ai_state
-            return [convert_message(msg) for msg in self.inspect_ai_state.messages]
-        else:
-            # No messages available
-            return []
-        
     def update_messages(self, messages: List[Dict[str, Any]], anthropic: bool = False):
         """Updates the context with a list of OpenAI messages."""
         with self.lock:
@@ -370,7 +277,7 @@ class SupervisionConfig:
 
     def set_mock_policy(self, mock_policy: MockPolicy):
         self.global_mock_policy = mock_policy
-        
+
     def set_execution_settings(self, execution_settings: Dict[str, Any]):
         self.execution_settings = execution_settings
 
@@ -378,7 +285,7 @@ class SupervisionConfig:
         """Load and process a previous execution log."""
         with open(log_file_path, 'r') as f:
             log_data = f.readlines()
-        
+
         if log_format == 'langchain':
             for line in log_data:
                 try:
@@ -394,7 +301,7 @@ class SupervisionConfig:
                     continue  # Skip lines that are not valid JSON
         else:
             raise ValueError(f"Unsupported log format: {log_format}")
-        
+
         # Update mock_responses with examples from previous calls
         self.mock_responses = self.previous_calls.copy()
 
@@ -488,7 +395,7 @@ class SupervisionConfig:
         for run in self.runs_by_name.get(run_name, []):
             return run
         return None
-    
+
     def get_all_runs(self) -> List[Run]:
         """Retrieve all runs across all projects and tasks."""
         return list(self.runs_by_id.values())

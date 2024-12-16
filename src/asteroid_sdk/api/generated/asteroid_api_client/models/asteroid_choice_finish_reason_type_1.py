@@ -1,7 +1,7 @@
 from enum import Enum
 
 
-class SentinelChoiceFinishReasonType1(str, Enum):
+class AsteroidChoiceFinishReasonType1(str, Enum):
     CONTENT_FILTER = "content_filter"
     FUNCTION_CALL = "function_call"
     LENGTH = "length"

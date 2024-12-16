@@ -1,5 +1,6 @@
 import datetime
 from typing import Any, Dict, List, Type, TypeVar, Union
+from uuid import UUID
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -7,31 +8,35 @@ from dateutil.parser import isoparse
 
 from ..types import UNSET, Unset
 
-T = TypeVar("T", bound="SentinelToolCall")
+T = TypeVar("T", bound="AsteroidToolCall")
 
 
 @_attrs_define
-class SentinelToolCall:
+class AsteroidToolCall:
     """
     Attributes:
-        id (str):
-        tool_id (str):
+        id (UUID):
+        tool_id (UUID):
+        call_id (Union[Unset, str]):
         name (Union[Unset, str]):
         arguments (Union[Unset, str]): Arguments in JSON format
         created_at (Union[Unset, datetime.datetime]):
     """
 
-    id: str
-    tool_id: str
+    id: UUID
+    tool_id: UUID
+    call_id: Union[Unset, str] = UNSET
     name: Union[Unset, str] = UNSET
     arguments: Union[Unset, str] = UNSET
     created_at: Union[Unset, datetime.datetime] = UNSET
     additional_properties: Dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
-        id = self.id
+        id = str(self.id)
 
-        tool_id = self.tool_id
+        tool_id = str(self.tool_id)
+
+        call_id = self.call_id
 
         name = self.name
 
@@ -49,6 +54,8 @@ class SentinelToolCall:
                 "tool_id": tool_id,
             }
         )
+        if call_id is not UNSET:
+            field_dict["call_id"] = call_id
         if name is not UNSET:
             field_dict["name"] = name
         if arguments is not UNSET:
@@ -61,9 +68,11 @@ class SentinelToolCall:
     @classmethod
     def from_dict(cls: Type[T], src_dict: Dict[str, Any]) -> T:
         d = src_dict.copy()
-        id = d.pop("id")
+        id = UUID(d.pop("id"))
 
-        tool_id = d.pop("tool_id")
+        tool_id = UUID(d.pop("tool_id"))
+
+        call_id = d.pop("call_id", UNSET)
 
         name = d.pop("name", UNSET)
 
@@ -76,16 +85,17 @@ class SentinelToolCall:
         else:
             created_at = isoparse(_created_at)
 
-        sentinel_tool_call = cls(
+        asteroid_tool_call = cls(
             id=id,
             tool_id=tool_id,
+            call_id=call_id,
             name=name,
             arguments=arguments,
             created_at=created_at,
         )
 
-        sentinel_tool_call.additional_properties = d
-        return sentinel_tool_call
+        asteroid_tool_call.additional_properties = d
+        return asteroid_tool_call
 
     @property
     def additional_keys(self) -> List[str]:
