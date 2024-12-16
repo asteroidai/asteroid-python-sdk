@@ -5,6 +5,7 @@ class SupervisorType(str, Enum):
     CLIENT_SUPERVISOR = "client_supervisor"
     HUMAN_SUPERVISOR = "human_supervisor"
     NO_SUPERVISOR = "no_supervisor"
+    CHAT_SUPERVISOR = "chat_supervisor"
 
     def __str__(self) -> str:
         return str(self.value)
