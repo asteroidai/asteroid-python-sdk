@@ -2,14 +2,11 @@ from typing import Any, Dict, List, Optional, Callable
 from uuid import UUID
 
 from openai.types.chat.chat_completion import ChatCompletion
-
 from asteroid_sdk.api.api_logger import APILogger
 from asteroid_sdk.api.generated.asteroid_api_client import Client
-from asteroid_sdk.supervision.config import ExecutionMode
-from asteroid_sdk.supervision.config import (
-    get_supervision_config,
-)
-from src.asteroid_sdk.api.supervision_runner import SupervisionRunner
+from asteroid_sdk.supervision.config import get_supervision_config
+from asteroid_sdk.api.supervision_runner import SupervisionRunner
+from asteroid_sdk.registration.helper import generate_fake_chat_tool_call
 
 
 class AsteroidLoggingError(Exception):
@@ -53,7 +50,7 @@ class AsteroidChatSupervisionManager:
             execution_mode: str,
             completions: Any,
             args: Any,
-            chat_supervisors: Optional[List[Callable]] = None
+            chat_supervisors: Optional[List[List[Callable]]] = None
     ) -> Optional[ChatCompletion]:
         """
         Send the raw response data to the Sentinel API, and process tool calls
@@ -68,63 +65,97 @@ class AsteroidChatSupervisionManager:
         :param chat_supervisors: The chat supervisors to use for supervision.
         :return: Potentially modified response after supervision and resampling, or None.
         """
-        try:
-            response_data = response if isinstance(response, dict) else response.to_dict()
-            create_new_chat_response = self.api_logger.log_llm_interaction(
+
+        # Get the run by the run_id to retrieve the supervision context
+        supervision_config = get_supervision_config()
+        run = supervision_config.get_run_by_id(run_id)
+        if not run:
+            print(f"Run not found for ID: {run_id}")
+            return None
+
+        supervision_context = run.supervision_context
+        # Update messages on the supervision context
+        supervision_context.update_messages(request_kwargs['messages'])
+
+        response_data = response if isinstance(response, dict) else response.to_dict()
+
+        # Process tool calls
+        processed = self.process_tool_calls(
+            response=response,
+            response_data=response_data,
+            supervision_context=supervision_context,
+            chat_supervisors=chat_supervisors
+        )
+
+        if not processed:
+            return None
+
+        response, response_data_tool_calls = processed
+
+        # Log the interaction
+        # It needs to be after the tool calls are processed in case we switch a chat message to tool call
+        create_new_chat_response = self.api_logger.log_llm_interaction(
+            response,
+            request_kwargs,
+            run_id,
+        )
+        choice_ids = create_new_chat_response.choice_ids
+
+        # Extract execution settings from the supervision configuration
+        new_response = self.supervision_runner.handle_tool_calls_from_llm_response(
+            args=args,
+            choice_ids=choice_ids,
+            completions=completions,
+            execution_mode=execution_mode,
+            request_kwargs=request_kwargs,
+            response=response,
+            response_data_tool_calls=response_data_tool_calls,
+            run_id=run_id,
+            supervision_context=supervision_context,
+            chat_supervisors=chat_supervisors  
+        )
+
+        return new_response
+
+    def process_tool_calls(
+            self,
+            response: ChatCompletion,
+            response_data: Dict[str, Any],
+            supervision_context: Any,
+            chat_supervisors: Optional[List[List[Callable]]] = None
+    ) -> Optional[tuple]:
+        """
+        Process the tool calls from the response data. If no tool calls are found,
+        handle accordingly based on the presence of chat supervisors.
+
+        :param response: The original ChatCompletion response from the OpenAI API.
+        :param response_data: The response data as a dictionary.
+        :param supervision_context: The supervision context associated with the run.
+        :param chat_supervisors: A list of chat supervisor callables.
+        :return: A tuple of (modified_response, response_data_tool_calls) or None.
+        """
+        response_data_tool_calls = response_data.get('choices', [{}])[0].get('message', {}).get('tool_calls')
+
+        if response_data_tool_calls:
+            return None  # No processing needed
+
+        if not chat_supervisors:
+            print(
+                "No tool calls found in response and no chat supervisors provided, only logging the messages to Asteroid")
+            self.api_logger.log_llm_interaction(
                 response,
-                request_kwargs,
-                run_id,
+                request_kwargs={},  # Pass actual request_kwargs if needed
+                run_id=UUID(int=0)  # Pass actual run_id if needed
             )
-            choice_ids = create_new_chat_response.choice_ids
+            return None
 
-            # Check for the presence of tool calls in the response
-            response_data_tool_calls = response_data.get('choices', [{}])[0].get('message', {}).get('tool_calls')
-            if not response_data_tool_calls:
-                if not chat_supervisors:
-                    print(
-                        "No tool calls found in response and no chat supervisors provided, skipping supervision checks")
-                    return None
-                else:
-                    print("No tool calls found in response, but chat supervisors provided, executing chat supervisors")
-                    # TODO: Execute chat supervisors
+        # Use the extracted function to generate fake tool calls
+        modified_response, response_data_tool_calls = generate_fake_chat_tool_call(
+            client=self.client,
+            response=response,
+            supervision_context=supervision_context,
+            chat_supervisors=chat_supervisors
+        )
+        print("No tool calls found in response, but chat supervisors provided, executing chat supervisors")
 
-            # Get the run by the run_id to retrieve the supervision context
-            supervision_config = get_supervision_config()
-            run = supervision_config.get_run_by_id(run_id)
-            if not run:
-                print(f"Run not found for ID: {run_id}")
-                return None
-
-            supervision_context = run.supervision_context
-            # Update messages on the supervision context - This is so that the supervisor can see the messages history
-            # TODO: The messages could be updated in a more elegant way
-            supervision_context.update_messages(request_kwargs['messages'])
-
-            # Extract execution settings from the supervision configuration
-            new_response = self.supervision_runner.handle_tool_calls_from_llm_response(
-                args, choice_ids,
-                completions,
-                execution_mode,
-                request_kwargs,
-                response,
-                response_data_tool_calls,
-                run_id,
-                supervision_context
-            )
-
-            # TODO Maybe not needed as the class above this handles monitoring mode. Wondering whether
-            #  it's better to keep this class as 'unaware as possible' of the execution mode
-            if execution_mode == ExecutionMode.MONITORING:
-                return response
-
-            return new_response
-        except Exception as e:
-            # Handle exceptions and raise a custom error
-            print(f"\n=== ERROR DETAILS ===")
-            print(f"Error type: {type(e)}")
-            print(f"Error message: {str(e)}")
-            if e.__traceback__ is not None:
-                print(f"Error occurred at line {e.__traceback__.tb_lineno}")
-            else:
-                print("No traceback available.")
-            raise AsteroidLoggingError(f"Failed to log response: {str(e)}") from e
+        return modified_response, response_data_tool_calls
