@@ -80,17 +80,14 @@ class AsteroidChatSupervisionManager:
         response_data = response if isinstance(response, dict) else response.to_dict()
 
         # Process tool calls
-        processed = self.process_tool_calls(
+        response, response_data_tool_calls = self.process_tool_calls(
             response=response,
             response_data=response_data,
             supervision_context=supervision_context,
+            request_kwargs=request_kwargs,
+            run_id=run_id,
             chat_supervisors=chat_supervisors
         )
-
-        if not processed:
-            return None
-
-        response, response_data_tool_calls = processed
 
         # Log the interaction
         # It needs to be after the tool calls are processed in case we switch a chat message to tool call
@@ -99,6 +96,10 @@ class AsteroidChatSupervisionManager:
             request_kwargs,
             run_id,
         )
+        
+        if not response_data_tool_calls:
+            return None
+        
         choice_ids = create_new_chat_response.choice_ids
 
         # Extract execution settings from the supervision configuration
@@ -122,8 +123,10 @@ class AsteroidChatSupervisionManager:
             response: ChatCompletion,
             response_data: Dict[str, Any],
             supervision_context: Any,
-            chat_supervisors: Optional[List[List[Callable]]] = None
-    ) -> Optional[tuple]:
+            request_kwargs: Dict[str, Any],
+            run_id: UUID,
+            chat_supervisors: Optional[List[List[Callable]]] = None,
+    ) -> tuple[ChatCompletion, Optional[List[Dict[str, Any]]]]:
         """
         Process the tool calls from the response data. If no tool calls are found,
         handle accordingly based on the presence of chat supervisors.
@@ -136,26 +139,16 @@ class AsteroidChatSupervisionManager:
         """
         response_data_tool_calls = response_data.get('choices', [{}])[0].get('message', {}).get('tool_calls')
 
-        if response_data_tool_calls:
-            return None  # No processing needed
-
-        if not chat_supervisors:
-            print(
-                "No tool calls found in response and no chat supervisors provided, only logging the messages to Asteroid")
-            self.api_logger.log_llm_interaction(
-                response,
-                request_kwargs={},  # Pass actual request_kwargs if needed
-                run_id=UUID(int=0)  # Pass actual run_id if needed
+        if chat_supervisors and not response_data_tool_calls:
+            # Use the extracted function to generate fake tool calls
+            modified_response, response_data_tool_calls = generate_fake_chat_tool_call(
+                client=self.client,
+                response=response,
+                supervision_context=supervision_context,
+                chat_supervisors=chat_supervisors
             )
-            return None
+            print("No tool calls found in response, but chat supervisors provided, executing chat supervisors")
 
-        # Use the extracted function to generate fake tool calls
-        modified_response, response_data_tool_calls = generate_fake_chat_tool_call(
-            client=self.client,
-            response=response,
-            supervision_context=supervision_context,
-            chat_supervisors=chat_supervisors
-        )
-        print("No tool calls found in response, but chat supervisors provided, executing chat supervisors")
-
-        return modified_response, response_data_tool_calls
+            return modified_response, response_data_tool_calls
+        else:
+            return response, response_data_tool_calls
