@@ -229,6 +229,13 @@ class SupervisionContext:
     def get_supervisor_by_id(self, supervisor_id: UUID) -> Optional[Callable]:
         """Retrieve a supervisor function by its ID."""
         return self.local_supervisors_by_id.get(supervisor_id)
+    
+    def get_supervisor_id_by_func(self, supervisor_func: Callable) -> Optional[UUID]:
+        """Retrieve a supervisor function by its function."""
+        for supervisor_id, func in self.local_supervisors_by_id.items():
+            if func == supervisor_func:
+                return supervisor_id
+        return None
 
 class Run(BaseModel):
     run_id: UUID

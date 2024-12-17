@@ -4,9 +4,13 @@ Handles helper functions for registration with asteroid.
 
 from datetime import datetime, timezone
 import inspect
-from typing import Any, Callable, Dict, Optional, List
+from typing import Any, Callable, Dict, Optional, List, Tuple
 from uuid import UUID, uuid4
 import time
+import copy
+import json
+from openai.types.chat.chat_completion import ChatCompletion
+from openai.types.chat.chat_completion_message_tool_call import ChatCompletionMessageToolCall, Function
 
 from asteroid_sdk.api.generated.asteroid_api_client.client import Client
 from asteroid_sdk.api.generated.asteroid_api_client.models import CreateProjectBody, CreateTaskBody
@@ -27,6 +31,7 @@ from asteroid_sdk.api.generated.asteroid_api_client.api.supervision.create_super
 from asteroid_sdk.api.generated.asteroid_api_client.api.supervision.get_supervision_request_status import sync_detailed as get_supervision_status_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.supervision.get_supervision_result import sync_detailed as get_supervision_result_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.supervisor.get_tool_supervisor_chains import sync_detailed as get_tool_supervisor_chains_sync_detailed
+from asteroid_sdk.api.generated.asteroid_api_client.api.run.update_run_status import sync_detailed as update_run_status_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor import Supervisor
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor_chain import SupervisorChain
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervision_request import SupervisionRequest
@@ -54,6 +59,15 @@ class APIClientFactory:
                 headers={"Authorization": f"Bearer {settings.api_key}"}
             )
         return cls._instance
+
+ # Define the 'chat_tool' function
+CHAT_TOOL_NAME = "chat_tool"
+def chat_tool(message: str) -> None:
+    """
+    A special tool to represent chat messages for supervision purposes.
+    """
+    pass
+
 
 def register_project(
     project_name: str, 
@@ -200,7 +214,42 @@ def create_run(
     except Exception as e:
         raise ValueError(f"Failed to create run: {str(e)}")
 
-def register_tools_and_supervisors(run_id: UUID, tools: Optional[List[Callable | StructuredTool]] = None, execution_settings: Dict[str, Any] = {}):
+def register_supervisor_chains(
+    client,
+    tool_id: UUID,
+    supervisor_chain_ids: List[List[UUID]],
+):
+    """
+    Associates supervisor chains with a given tool.
+
+    Args:
+        client: The API client used for making API calls.
+        tool_id (UUID): The UUID of the tool to associate supervisors with.
+        supervisor_chain_ids (List[List[UUID]]): A list of lists of supervisor IDs, where each inner list represents a supervisor chain.
+    """
+    # Associate the supervisor chains with the tool
+    if supervisor_chain_ids:
+        chain_requests = [ChainRequest(supervisor_ids=supervisor_ids) for supervisor_ids in supervisor_chain_ids]
+        association_response = create_tool_supervisor_chains_sync_detailed(
+            tool_id=tool_id,
+            client=client,
+            body=chain_requests
+        )
+        if association_response.status_code in [200, 201]:
+            print(f"Supervisors assigned to tool with ID {tool_id}")
+        else:
+            raise Exception(f"Failed to assign supervisors to tool with ID {tool_id}. Response: {association_response}")
+    else:
+        print(f"No supervisors to assign to tool with ID {tool_id}")
+
+
+
+def register_tools_and_supervisors(
+    run_id: UUID,
+    tools: Optional[List[Callable]] = None,
+    execution_settings: Dict[str, Any] = {},
+    chat_supervisors: Optional[List[List[Callable]]] = None
+):
     """
     Registers tools and supervisors with the backend API.
     """
@@ -215,24 +264,28 @@ def register_tools_and_supervisors(run_id: UUID, tools: Optional[List[Callable |
         raise Exception(f"Run with ID {run_id} not found in supervision config.")
     supervision_context = run.supervision_context
 
-    # TODO: Do this better
+    # Get the project ID
     project_id = list(supervision_config.projects.values())[0].project_id 
 
-    # TODO: Make sure this is correct
+    # Determine which functions to register
     if tools is None: 
         # If no tools are provided, register all tools and supervisors
         supervised_functions = supervision_context.supervised_functions_registry
     else:
-        # If list of tools is provided, only register the tools and supervisors for the provided tools  
+        # Register only the provided tools
         supervised_functions = {}
         for tool in tools:
             # Check if tool is StructuredTool
             if isinstance(tool, StructuredTool):
-                supervised_functions[tool.func.__qualname__] = supervision_context.supervised_functions_registry[tool.func.__qualname__]
+                func_name = tool.func.__qualname__
+                supervised_functions[func_name] = supervision_context.supervised_functions_registry[func_name]
             else:
-                print(f"Tool is {tool}")
-                supervised_functions[tool.__qualname__] = supervision_context.supervised_functions_registry[tool.__qualname__]
-
+                func_name = tool.__qualname__
+                supervised_functions[func_name] = supervision_context.supervised_functions_registry[func_name]
+    if chat_supervisors is not None:
+        supervision_context.add_supervised_function(chat_tool, supervision_functions=[chat_supervisors])
+        supervised_functions[CHAT_TOOL_NAME] = supervision_context.supervised_functions_registry[CHAT_TOOL_NAME]
+        
 
     for tool_name, data in supervised_functions.items():
         supervision_functions = data['supervision_functions']
@@ -249,7 +302,7 @@ def register_tools_and_supervisors(run_id: UUID, tools: Optional[List[Callable |
             for param in func_signature.parameters.values()
         }
 
-        # Pass the extracted arguments to ToolAttributes.from_dict
+        # Create attributes for the tool
         attributes = CreateRunToolBodyAttributes.from_dict(src_dict=func_arguments)
 
         # Register the tool
@@ -277,55 +330,49 @@ def register_tools_and_supervisors(run_id: UUID, tools: Optional[List[Callable |
         else:
             raise Exception(f"Failed to register tool '{tool_name}'. Response: {tool_response}")
 
-        # Register supervisors and associate them with the tool
+        # Register supervisors and collect supervisor IDs
         supervisor_chain_ids: List[List[UUID]] = []
-        if supervision_functions == []:
+        if not supervision_functions:
             supervisor_chain_ids.append([])
             from asteroid_sdk.supervision.supervisors import auto_approve_supervisor
             supervisor_func = auto_approve_supervisor()
-            supervisor_info: dict[str, Any] = {
-                    'func': supervisor_func,
-                    'name': getattr(supervisor_func, '__name__', 'supervisor_name'),
-                    'description': getattr(supervisor_func, '__doc__', 'supervisor_description'),
-                    'type': SupervisorType.NO_SUPERVISOR,
-                    'code': get_function_code(supervisor_func),
-                    'supervisor_attributes': getattr(supervisor_func, 'supervisor_attributes', {})
+            supervisor_info: Dict[str, Any] = {
+                'func': supervisor_func,
+                'name': getattr(supervisor_func, '__name__', 'auto_approve_supervisor'),
+                'description': getattr(supervisor_func, '__doc__', 'Automatically approves any input.'),
+                'type': SupervisorType.NO_SUPERVISOR,
+                'code': get_function_code(supervisor_func),
+                'supervisor_attributes': getattr(supervisor_func, 'supervisor_attributes', {})
             }
             supervisor_id = register_supervisor(client, supervisor_info, project_id, supervision_context)
             supervisor_chain_ids[0] = [supervisor_id]
         else:
             for idx, supervisor_func_list in enumerate(supervision_functions):
-                supervisor_chain_ids.append([])
+                supervisor_chain_ids.append([]) if tool_name != CHAT_TOOL_NAME else supervisor_chain_ids
                 for supervisor_func in supervisor_func_list:
-                    supervisor_info: dict[str, Any] = {
+                    supervisor_info: Dict[str, Any] = {
                         'func': supervisor_func,
-                        'name': getattr(supervisor_func, '__name__', None) or 'supervisor_name',
-                        'description': getattr(supervisor_func, '__doc__', None) or 'supervisor_description',
-                        'type': SupervisorType.HUMAN_SUPERVISOR if getattr(supervisor_func, '__name__', 'supervisor_name') in ['human_supervisor', 'human_approver'] else SupervisorType.CLIENT_SUPERVISOR,
+                        'name': getattr(supervisor_func, '__name__', 'supervisor_name'),
+                        'description': getattr(supervisor_func, '__doc__', 'supervisor_description'),
+                        'type': SupervisorType.HUMAN_SUPERVISOR if getattr(supervisor_func, '__name__', '') in ['human_supervisor', 'human_approver'] else SupervisorType.CLIENT_SUPERVISOR,
                         'code': get_function_code(supervisor_func),
                         'supervisor_attributes': getattr(supervisor_func, 'supervisor_attributes', {})
                     }
                     supervisor_id = register_supervisor(client, supervisor_info, project_id, supervision_context)
-                    supervisor_chain_ids[idx].append(supervisor_id)
-
+                    if tool_name != CHAT_TOOL_NAME:
+                        supervisor_chain_ids[idx].append(supervisor_id)
+        
         # Ensure tool_id is a UUID before proceeding
         if tool_id is UNSET or not isinstance(tool_id, UUID):
             raise ValueError("Invalid tool_id: Expected UUID")
 
+        # Call the function to associate supervisor chains with the tool
         print(f"Associating supervisors with tool '{tool_name}' for run ID {run_id}")
-        if supervisor_chain_ids:
-            chain_requests = [ChainRequest(supervisor_ids=supervisor_ids) for supervisor_ids in supervisor_chain_ids]
-            association_response = create_tool_supervisor_chains_sync_detailed(
-                tool_id=tool_id,
-                client=client,
-                body=chain_requests
-            )
-            if association_response.status_code in [200, 201]:
-                print(f"Supervisors assigned to tool '{tool_name}' for run ID {run_id}")
-            else:
-                raise Exception(f"Failed to assign supervisors to tool '{tool_name}'. Response: {association_response}")
-        else:
-                print(f"No supervisors to assign to tool '{tool_name}'")
+        register_supervisor_chains(
+            client=client,
+            tool_id=tool_id,
+            supervisor_chain_ids=supervisor_chain_ids,
+        )
 
 def register_supervisor(client: Client, supervisor_info: dict, project_id: UUID, supervision_context: SupervisionContext) -> UUID:
     """Registers a single supervisor with the API and returns its ID."""
@@ -359,7 +406,7 @@ def register_supervisor(client: Client, supervisor_info: dict, project_id: UUID,
         return supervisor_id
     else:
         raise Exception(f"Failed to register supervisor '{supervisor_info['name']}'. Response: {supervisor_response}")
-    
+
 def get_supervisor_chains_for_tool(tool_id: UUID, client: Client) -> List[SupervisorChain]:
     """
     Retrieve the supervisor chains for a specific tool.
@@ -556,3 +603,74 @@ def map_result_to_decision(result: SupervisionResult) -> SupervisionDecision:
         explanation=result.reasoning,
         modified=modified_output
     )
+    
+def submit_run_status(run_id: UUID, status: Status):
+    try:
+        client = APIClientFactory.get_client()
+        response = update_run_status_sync_detailed(
+            client=client,
+            run_id=run_id,
+            body=status
+        )
+        if response.status_code in [204]:
+            print(f"Successfully submitted run status for run ID: {run_id}")
+        else:
+            raise Exception(f"Failed to submit run status. Response: {response}")
+    except Exception as e:
+        print(f"Error submitting run status: {e}, Response: {response}")
+        raise
+
+
+def generate_fake_chat_tool_call(
+        client: Client,
+        response: ChatCompletion,
+        supervision_context: Any,
+        chat_supervisors: Optional[List[List[Callable]]] = None
+) -> Tuple[ChatCompletion, List[ChatCompletionMessageToolCall]]:
+    """
+    Generate a fake chat tool call when no tool calls are present in the response.
+
+    :param response: The original ChatCompletion response from the OpenAI API.
+    :param supervision_context: The supervision context associated with the run.
+    :param chat_supervisors: A list of chat supervisor callables. If provided, the supervisor chains will be registered with the Asteroid API.
+    :return: A tuple containing the modified response and the list of tool calls.
+    """
+    print("No tool calls found in response, but chat supervisors provided, executing chat supervisors")
+    
+    # Extract the text response from the original response
+    text_response = response.choices[0].message.content
+    
+    # Deep copy the original response to avoid mutating it
+    modified_response = copy.deepcopy(response)
+    
+    # Create a fake tool call representing the chat tool function
+    chat_tool_call = ChatCompletionMessageToolCall(
+        id=str(uuid4()),
+        function=Function(
+            name=CHAT_TOOL_NAME,
+            arguments=json.dumps({"message": text_response})
+        ),
+        type='function'
+    )
+    
+    # Assign the fake tool call to the response
+    modified_response.choices[0].message.tool_calls = [chat_tool_call]
+    
+    if chat_supervisors:
+        # Retrieve supervisor IDs based on the provided chat supervisors
+        chat_supervisor_ids = [
+            [supervision_context.get_supervisor_id_by_func(chat_supervisor) for chat_supervisor in chat_supervisors_chain]
+            for chat_supervisors_chain in chat_supervisors
+        ]
+        
+        # Get the tool ID for the chat tool
+        tool_id = supervision_context.get_supervised_function_entry(CHAT_TOOL_NAME).get("tool_id")
+        
+        # Register the supervisor chains with the Asteroid API client
+        register_supervisor_chains(
+            client=client,
+            tool_id=tool_id,
+            supervisor_chain_ids=chat_supervisor_ids
+        )
+    
+    return modified_response, [chat_tool_call]

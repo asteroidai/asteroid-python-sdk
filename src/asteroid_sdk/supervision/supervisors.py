@@ -13,7 +13,7 @@ from .config import (
 )
 import json
 from openai import OpenAI
-from openai.types.chat.chat_completion_message import ChatCompletionMessageToolCall
+from openai.types.chat.chat_completion_message import ChatCompletionMessageToolCall, ChatCompletionMessage
 
 client = OpenAI()
 
@@ -57,9 +57,10 @@ class ChatSupervisor(Protocol):
 
     def __call__(
         self,
-        message: dict,
+        message: str,
         supervision_context: Optional[SupervisionContext],
-        supervision_request_id: Optional[UUID],
+        ignored_attributes: list[str] = [],
+        supervision_request_id: Optional[UUID] = None,
         previous_decision: Optional[SupervisionDecision] = None,
         **kwargs
     ) -> SupervisionDecision:
@@ -326,14 +327,15 @@ def tool_supervisor_decorator(**config_kwargs) -> Callable:
         return wrapper
     return decorator
 
-#TODO: Finish this decorator
+
 def chat_supervisor_decorator(**config_kwargs) -> Callable:
     """Decorator to create a chat supervisor function with arbitrary configuration parameters."""
     def decorator(func: Callable) -> ChatSupervisor:
         @wraps(func)
         def wrapper(
-            message: dict,
+            message: str,
             supervision_context: Optional[SupervisionContext] = None,
+            ignored_attributes: list[str] = [],
             supervision_request_id: Optional[UUID] = None,
             previous_decision: Optional[SupervisionDecision] = None,
             **kwargs
@@ -342,6 +344,7 @@ def chat_supervisor_decorator(**config_kwargs) -> Callable:
             return func(
                 message=message,
                 supervision_context=supervision_context,
+                ignored_attributes=ignored_attributes,
                 supervision_request_id=supervision_request_id,
                 previous_decision=previous_decision,
                 config_kwargs=config_kwargs,
