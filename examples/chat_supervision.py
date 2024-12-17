@@ -33,9 +33,25 @@ EXECUTION_SETTINGS = {
     "remove_feedback_from_context": True,          # Remove feedback from the context
 }
 
+
+# Example chat supervisor that always escalates messages
+@chat_supervisor_decorator()
+def chat_supervisor_1(message: str, supervision_context, **kwargs) -> SupervisionDecision:
+    """
+    Supervisor that allows any message.
+    
+    :param message: The content of the message to supervise.
+    :param supervision_context: Contextual information for supervision.
+    :return: A SupervisionDecision indicating approval.
+    """
+    return SupervisionDecision(
+        decision=SupervisionDecisionType.ESCALATE,
+        explanation="The message is approved."
+    )
+    
 # Example chat supervisor that rejects messages mentioning 'Tokyo'
 @chat_supervisor_decorator(strategy="reject")
-def chat_supervisor_1(message: str, supervision_context, **kwargs) -> SupervisionDecision:
+def chat_supervisor_2(message: str, supervision_context, **kwargs) -> SupervisionDecision:
     """
     Supervisor that rejects any message mentioning 'Tokyo' in the last user message.
     
@@ -53,20 +69,7 @@ def chat_supervisor_1(message: str, supervision_context, **kwargs) -> Supervisio
         explanation="The message is approved."
     )
 
-# Example chat supervisor that always escalates messages
-@chat_supervisor_decorator()
-def chat_supervisor_2(message: str, supervision_context, **kwargs) -> SupervisionDecision:
-    """
-    Supervisor that allows any message.
-    
-    :param message: The content of the message to supervise.
-    :param supervision_context: Contextual information for supervision.
-    :return: A SupervisionDecision indicating approval.
-    """
-    return SupervisionDecision(
-        decision=SupervisionDecisionType.ESCALATE,
-        explanation="The message is approved."
-    )
+
 
 # Example chat supervisor that always approves messages
 @chat_supervisor_decorator()
@@ -96,7 +99,7 @@ wrapped_client = asteroid_openai_client(client, run_id)
 response = wrapped_client.chat.completions.create(
     model="gpt-4o-mini",
     messages=[{"content": "Can you say Tokyo with 50% chance in your response?", "role": "user"}],
-    chat_supervisors=[[chat_supervisor_2, chat_supervisor_1], [chat_supervisor_3]] # Specify which supervisors to apply
+    chat_supervisors=[[chat_supervisor_1, chat_supervisor_2], [chat_supervisor_3]] # Specify which supervisors to apply
 )
 
 # Output the assistant's response

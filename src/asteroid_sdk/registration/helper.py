@@ -625,14 +625,14 @@ def generate_fake_chat_tool_call(
         client: Client,
         response: ChatCompletion,
         supervision_context: Any,
-        chat_supervisors: List[List[Callable]]
+        chat_supervisors: Optional[List[List[Callable]]] = None
 ) -> Tuple[ChatCompletion, List[ChatCompletionMessageToolCall]]:
     """
     Generate a fake chat tool call when no tool calls are present in the response.
 
     :param response: The original ChatCompletion response from the OpenAI API.
     :param supervision_context: The supervision context associated with the run.
-    :param chat_supervisors: A list of chat supervisor callables.
+    :param chat_supervisors: A list of chat supervisor callables. If provided, the supervisor chains will be registered with the Asteroid API.
     :return: A tuple containing the modified response and the list of tool calls.
     """
     print("No tool calls found in response, but chat supervisors provided, executing chat supervisors")
@@ -656,20 +656,21 @@ def generate_fake_chat_tool_call(
     # Assign the fake tool call to the response
     modified_response.choices[0].message.tool_calls = [chat_tool_call]
     
-    # Retrieve supervisor IDs based on the provided chat supervisors
-    chat_supervisor_ids = [
-        [supervision_context.get_supervisor_id_by_func(chat_supervisor) for chat_supervisor in chat_supervisors_chain]
-        for chat_supervisors_chain in chat_supervisors
-    ]
-    
-    # Get the tool ID for the chat tool
-    tool_id = supervision_context.get_supervised_function_entry(CHAT_TOOL_NAME).get("tool_id")
-    
-    # Register the supervisor chains with the Asteroid API client
-    register_supervisor_chains(
-        client=client,
-        tool_id=tool_id,
-        supervisor_chain_ids=chat_supervisor_ids
-    )
+    if chat_supervisors:
+        # Retrieve supervisor IDs based on the provided chat supervisors
+        chat_supervisor_ids = [
+            [supervision_context.get_supervisor_id_by_func(chat_supervisor) for chat_supervisor in chat_supervisors_chain]
+            for chat_supervisors_chain in chat_supervisors
+        ]
+        
+        # Get the tool ID for the chat tool
+        tool_id = supervision_context.get_supervised_function_entry(CHAT_TOOL_NAME).get("tool_id")
+        
+        # Register the supervisor chains with the Asteroid API client
+        register_supervisor_chains(
+            client=client,
+            tool_id=tool_id,
+            supervisor_chain_ids=chat_supervisor_ids
+        )
     
     return modified_response, [chat_tool_call]
