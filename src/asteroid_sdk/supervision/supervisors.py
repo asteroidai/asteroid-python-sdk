@@ -13,7 +13,7 @@ from .config import (
 )
 import json
 from openai import OpenAI
-from openai.types.chat.chat_completion_message import ChatCompletionMessageToolCall, ChatCompletionMessage
+from openai.types.chat.chat_completion_message import ChatCompletionMessageToolCall
 
 client = OpenAI()
 
@@ -124,8 +124,8 @@ ModifiedData:
             arguments_str = "The function does not require any arguments."
 
         # Prepare the assistant's instructions
-        instructions_content = "Instructions:\n" + instructions 
-        
+        instructions_content = "Instructions:\n" + instructions
+
         if previous_decision is not None:
             instructions_content += "\n\nDecision made by the previous supervisor:\nDecision: " + previous_decision.decision + "\nExplanation: " + str(previous_decision.explanation)
 
