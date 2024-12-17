@@ -32,7 +32,7 @@ class CompletionsWrapper:
         self.run_id = run_id
         self.execution_mode = execution_mode
 
-    def create(self, *args, chat_supervisors: Optional[List[Callable]] = None, **kwargs) -> Any:
+    def create(self, *args, chat_supervisors: Optional[List[List[Callable]]] = None, **kwargs) -> Any:
         # If parallel tool calls not set to false (or doesn't exist, defaulting to true), then raise an error.
         # Parallel tool calls do not work at the moment due to conflicts when trying to 'resample'
         if kwargs.get("tools", None) and kwargs.get("parallel_tool_calls", True) :
@@ -49,7 +49,7 @@ class CompletionsWrapper:
         else:
             raise ValueError(f"Invalid execution mode: {self.execution_mode}")
 
-    def create_sync(self, *args, chat_supervisors: Optional[List[Callable]] = None, **kwargs) -> Any:
+    def create_sync(self, *args, chat_supervisors: Optional[List[List[Callable]]] = None, **kwargs) -> Any:
         # Log the entire request payload
         try:
             self.chat_supervision_manager.log_request(kwargs, self.run_id)
@@ -81,7 +81,7 @@ class CompletionsWrapper:
             except AsteroidLoggingError:
                 raise e
 
-    async def create_async(self, *args, chat_supervisors: Optional[List[Callable]] = None, **kwargs) -> Any:
+    async def create_async(self, *args, chat_supervisors: Optional[List[List[Callable]]] = None, **kwargs) -> Any:
         # Log the entire request payload asynchronously
         try:
             await asyncio.to_thread(self.chat_supervision_manager.log_request, kwargs, self.run_id)
