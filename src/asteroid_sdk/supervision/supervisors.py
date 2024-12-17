@@ -57,7 +57,7 @@ class ChatSupervisor(Protocol):
 
     def __call__(
         self,
-        message: ChatCompletionMessage,
+        message: str,
         supervision_context: Optional[SupervisionContext],
         ignored_attributes: list[str] = [],
         supervision_request_id: Optional[UUID] = None,
@@ -333,7 +333,7 @@ def chat_supervisor_decorator(**config_kwargs) -> Callable:
     def decorator(func: Callable) -> ChatSupervisor:
         @wraps(func)
         def wrapper(
-            message: dict,
+            message: str,
             supervision_context: Optional[SupervisionContext] = None,
             ignored_attributes: list[str] = [],
             supervision_request_id: Optional[UUID] = None,
