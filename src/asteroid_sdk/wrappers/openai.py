@@ -12,9 +12,11 @@ from asteroid_sdk.api.generated.asteroid_api_client import Client
 from asteroid_sdk.api.supervision_runner import SupervisionRunner
 from asteroid_sdk.api.asteroid_chat_supervision_manager import AsteroidChatSupervisionManager, AsteroidLoggingError
 from asteroid_sdk.settings import settings
-from asteroid_sdk.registration.helper import create_run, register_project, register_task, register_tools_and_supervisors
+from asteroid_sdk.registration.helper import create_run, register_project, register_task, register_tools_and_supervisors, submit_run_status
+from asteroid_sdk.api.generated.asteroid_api_client.models.status import Status
 from asteroid_sdk.supervision.config import ExecutionMode, RejectionPolicy
 import asyncio
+import logging
 
 class CompletionsWrapper:
     """Wraps chat completions with logging capabilities"""
@@ -33,8 +35,10 @@ class CompletionsWrapper:
     def create(self, *args, chat_supervisors: Optional[List[Callable]] = None, **kwargs) -> Any:
         # If parallel tool calls not set to false (or doesn't exist, defaulting to true), then raise an error.
         # Parallel tool calls do not work at the moment due to conflicts when trying to 'resample'
-        if kwargs.get("parallel_tool_calls", True):
-            raise ValueError("Parallel tool calls are not supported, Please turn them off by setting 'parallel_tool_calls=False' in your request.")
+        if kwargs.get("tools", None) and kwargs.get("parallel_tool_calls", True) :
+            # parallel_tool_calls is only supported by openai when tools are specified            
+            logging.warning("Parallel tool calls are not supported, setting parallel_tool_calls=False")
+            kwargs["parallel_tool_calls"] = False
 
         if self.execution_mode == ExecutionMode.MONITORING:
             # Run in async mode
@@ -60,7 +64,8 @@ class CompletionsWrapper:
             try:
                 new_response = self.chat_supervision_manager.handle_language_model_interaction(
                     response, request_kwargs=kwargs, run_id=self.run_id,
-                    execution_mode=self.execution_mode, completions=self._completions, args=args
+                    execution_mode=self.execution_mode, completions=self._completions, args=args,
+                    chat_supervisors=chat_supervisors
                 )
                 if new_response is not None:
                     print(f"New response: {new_response}")
@@ -152,7 +157,8 @@ def asteroid_init(
     task_name: str = "My Agent",
     run_name: str = "My Run",
     tools: Optional[List[Callable]] = None,
-    execution_settings: Dict[str, Any] = {}
+    execution_settings: Dict[str, Any] = {},
+    chat_supervisors: Optional[List[List[Callable]]] = None
 ) -> UUID:
     """
     Initializes supervision for a project, task, and run.
@@ -166,7 +172,7 @@ def asteroid_init(
     run_id = create_run(project_id, task_id, run_name)
     print(f"Registered new run with ID: {run_id}")
 
-    register_tools_and_supervisors(run_id, tools, execution_settings)
+    register_tools_and_supervisors(run_id, tools, execution_settings, chat_supervisors)
 
     return run_id
 
@@ -174,4 +180,4 @@ def asteroid_end(run_id: UUID) -> None:
     """
     Stops supervision for a run.
     """
-    pass
+    submit_run_status(run_id, Status.COMPLETED)
