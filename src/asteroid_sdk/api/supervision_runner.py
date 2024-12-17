@@ -427,8 +427,7 @@ class SupervisionRunner:
                     resampled_response, resampled_tool_calls = generate_fake_chat_tool_call(
                         client=self.client,
                         response=resampled_response,
-                        supervision_context=supervision_context,
-                        chat_supervisors=chat_supervisors
+                        supervision_context=supervision_context
                     )
 
             # Log the interaction
