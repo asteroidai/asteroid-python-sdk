@@ -436,6 +436,11 @@ class SupervisionRunner:
                 resampled_request_kwargs,
                 run_id
             )
+            
+            if not resampled_response.choices[0].message.tool_calls:
+                # There was no tool call found in the resampled response, so we return the message as is
+                return resampled_response.choices[0].message
+
             resampled_tool_call_id = resampled_create_new_chat_response.choice_ids[0].tool_call_ids[0].tool_call_id
             resampled_tool_id = resampled_create_new_chat_response.choice_ids[0].tool_call_ids[0].tool_id
             resampled_tool_call = resampled_response.choices[0].message.tool_calls[0]
