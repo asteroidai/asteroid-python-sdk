@@ -26,7 +26,7 @@ from asteroid_sdk.wrappers.openai import (
     asteroid_end,
 )
 from openai import OpenAI
-
+from asteroid_sdk.supervision.config import SupervisionContext
 
 def _process_refund(customer_id: str, amount: float):
     """Process a refund for a customer."""
@@ -35,7 +35,7 @@ def _process_refund(customer_id: str, amount: float):
 
 
 # Define maximum allowed refund amount
-MAX_REFUND_AMOUNT = 500.0
+MAX_REFUND_AMOUNT = 800.0
 
 # Supervisor to check refund amount limits
 @tool_supervisor_decorator()
@@ -52,13 +52,13 @@ def amount_supervisor(
         return SupervisionDecision(
             decision=SupervisionDecisionType.ESCALATE,
             explanation=(
-                f"The refund amount (${amount}) exceeds the maximum allowed amount (${MAX_REFUND_AMOUNT})."
+                f"The refund amount (${amount}) exceeds the maximum allowed amount (${MAX_REFUND_AMOUNT}). "
             )
         )
     else:
         return SupervisionDecision(
             decision=SupervisionDecisionType.APPROVE,
-            explanation="Refund amount is within the allowed limit."
+            explanation=f"Refund amount is within the allowed limit of ${MAX_REFUND_AMOUNT}."
         )
 
 
@@ -66,20 +66,21 @@ def amount_supervisor(
 def shipping_status_supervisor(
     tool_call: ChatCompletionMessageToolCall,
     config_kwargs: dict[str, Any],
-    messages: list[dict[str, Any]],
+    supervision_context: SupervisionContext,
     **kwargs
 ) -> SupervisionDecision:
     """Supervisor that ensures the agent has verified the shipping status."""
     # Check conversation history for shipping status verification
     shipping_verified = False
+    messages = supervision_context.openai_messages
     for message in messages:
-        if "shipping status" in message.get("content", "").lower():
+        if "shipping" in message.get("content", "").lower():
             shipping_verified = True
             break
 
     if not shipping_verified:
         return SupervisionDecision(
-            decision=SupervisionDecisionType.REJECT,
+            decision=SupervisionDecisionType.ESCALATE,
             explanation="Agent did not verify shipping status before processing the refund."
         )
     else:
@@ -93,20 +94,19 @@ def shipping_status_supervisor(
 def authentication_supervisor(
     tool_call: ChatCompletionMessageToolCall,
     config_kwargs: dict[str, Any],
-    messages: list[dict[str, Any]],
     **kwargs
 ) -> SupervisionDecision:
     """Supervisor that checks if the customer is authenticated."""
     # Check conversation history for customer authentication
-    customer_authenticated = False
-    for message in messages:
-        if "customer id" in message.get("content", "").lower():
-            customer_authenticated = True
-            break
+    customer_authenticated = True
+    # for message in messages:
+    #     if "customer id" in message.get("content", "").lower():
+    #         customer_authenticated = True
+    #         break
 
     if not customer_authenticated:
         return SupervisionDecision(
-            decision=SupervisionDecisionType.REJECT,
+            decision=SupervisionDecisionType.ESCALATE,
             explanation="Customer is not authenticated."
         )
     else:
@@ -120,36 +120,31 @@ def authentication_supervisor(
 def resolution_attempt_supervisor(
     tool_call: ChatCompletionMessageToolCall,
     config_kwargs: dict[str, Any],
-    messages: list[dict[str, Any]],
     **kwargs
 ) -> SupervisionDecision:
     """Supervisor that checks if the agent attempted to resolve the issue."""
     # Check conversation history for resolution attempts
-    resolution_attempted = False
-    for message in messages:
-        if any(phrase in message.get("content", "").lower() for phrase in ["wait a bit longer", "offer discount", "expedited shipping"]):
-            resolution_attempted = True
-            break
+    resolution_attempted = True
 
     if not resolution_attempted:
         return SupervisionDecision(
-            decision=SupervisionDecisionType.REJECT,
+            decision=SupervisionDecisionType.ESCALATE,
             explanation="Agent did not attempt to resolve the issue before processing the refund."
         )
     else:
         return SupervisionDecision(
             decision=SupervisionDecisionType.APPROVE,
-            explanation="Agent attempted to resolve the issue before proceeding to refund."
+            explanation="Agent attempted to resolve the issue by asking the customer to wait a bit longer before proceeding to refund."
         )
 
 
 # Wrap the refund tool with supervision using the supervisors
 @supervise(
     supervision_functions=[
-        [amount_supervisor],
-        [shipping_status_supervisor]
-        # [authentication_supervisor, human_supervisor()],
-        # [resolution_attempt_supervisor, human_supervisor()]
+        [authentication_supervisor, human_supervisor()],
+        [amount_supervisor, human_supervisor()],
+        [resolution_attempt_supervisor, human_supervisor()],
+        [shipping_status_supervisor, human_supervisor()]
     ]
 )
 def process_refund(customer_id: str, amount: float):
@@ -258,6 +253,8 @@ if assistant_message.tool_calls:
             "tool_call_id": tool_call.id,
             "content": str(result)
         })
+        
+messages.append({"role": "user", "content": "Yes, the shipping status is 'Not dispatched yet.'"})
 
 # Submit the final message to the supervisor
 response = wrapped_client.chat.completions.create(
