@@ -13,7 +13,7 @@ class Settings:
         print("Initializing settings")
 
         # Asteroid API settings
-        self.api_key = os.getenv('ASTEROID_API_KEY', 'Unused')
+        self.api_key = os.getenv('ASTEROID_API_KEY')
         self.api_url = os.getenv('ASTEROID_API_URL')
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
 

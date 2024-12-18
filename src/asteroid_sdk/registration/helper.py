@@ -56,7 +56,7 @@ class APIClientFactory:
         if cls._instance is None:
             cls._instance = Client(
                 base_url=settings.api_url,
-                headers={"Authorization": f"Bearer {settings.api_key}"}
+                headers={"X-Asteroid-Api-Key": f"{settings.api_key}"}
             )
         return cls._instance
 

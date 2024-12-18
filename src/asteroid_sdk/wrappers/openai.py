@@ -132,7 +132,7 @@ def asteroid_openai_client(
     try:
 
         # TODO - Clean up where this is instantiated
-        client = Client(base_url=settings.api_url)
+        client = Client(base_url=settings.api_url, headers={"X-Asteroid-Api-Key": f"{settings.api_key}"})
         api_logger = APILogger(client)
         supervision_runner = SupervisionRunner(client, api_logger)
         supervision_manager = AsteroidChatSupervisionManager(client, api_logger, supervision_runner)
