@@ -1,5 +1,6 @@
 from typing import Protocol, List, Union, TYPE_CHECKING
 
+from anthropic.types import Message, ToolUseBlock
 from openai.types.chat import ChatCompletion, ChatCompletionMessageToolCall
 
 from asteroid_sdk.api.generated.asteroid_api_client.models import ChatFormat
@@ -7,8 +8,8 @@ from asteroid_sdk.api.generated.asteroid_api_client.models import ChatFormat
 if TYPE_CHECKING:
     from asteroid_sdk.supervision.model.tool_call import ToolCall
 
-AvailableProviderResponses = Union[ChatCompletion]
-AvailableProviderToolCalls = Union[ChatCompletionMessageToolCall]
+AvailableProviderResponses = Union[ChatCompletion, Message]
+AvailableProviderToolCalls = Union[ChatCompletionMessageToolCall, ToolUseBlock]
 
 class ModelProviderHelper(Protocol):
     def get_tool_call_from_response(self, response: AvailableProviderResponses) -> List['ToolCall']:
