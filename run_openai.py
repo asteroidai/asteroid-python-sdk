@@ -113,7 +113,7 @@ EXECUTION_SETTINGS = {
 
 for i in range(1):
     run_id = asteroid_init(
-        project_name="my-project",
+        project_name="openai",
         task_name="my-task",
         run_name="my-run",
         execution_settings=EXECUTION_SETTINGS
