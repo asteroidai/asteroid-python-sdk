@@ -2,21 +2,21 @@
 Wrapper for the OpenAI client to intercept requests and responses.
 """
 
-import json
-from typing import Any, Callable, List, Optional, Dict
+import asyncio
+import logging
+from typing import Any, Callable, List, Optional
 from uuid import UUID
+
 from openai import OpenAIError
 
 from asteroid_sdk.api.api_logger import APILogger
+from asteroid_sdk.api.asteroid_chat_supervision_manager import AsteroidChatSupervisionManager, AsteroidLoggingError
 from asteroid_sdk.api.generated.asteroid_api_client import Client
 from asteroid_sdk.api.supervision_runner import SupervisionRunner
-from asteroid_sdk.api.asteroid_chat_supervision_manager import AsteroidChatSupervisionManager, AsteroidLoggingError
 from asteroid_sdk.settings import settings
-from asteroid_sdk.registration.helper import create_run, register_project, register_task, register_tools_and_supervisors, submit_run_status
-from asteroid_sdk.api.generated.asteroid_api_client.models.status import Status
-from asteroid_sdk.supervision.config import ExecutionMode, RejectionPolicy
-import asyncio
-import logging
+from asteroid_sdk.supervision.config import ExecutionMode
+from asteroid_sdk.supervision.helpers.openai_helper import OpenAiSupervisionHelper
+
 
 class CompletionsWrapper:
     """Wraps chat completions with logging capabilities"""
@@ -36,7 +36,7 @@ class CompletionsWrapper:
         # If parallel tool calls not set to false (or doesn't exist, defaulting to true), then raise an error.
         # Parallel tool calls do not work at the moment due to conflicts when trying to 'resample'
         if kwargs.get("tools", None) and kwargs.get("parallel_tool_calls", True) :
-            # parallel_tool_calls is only supported by openai when tools are specified            
+            # parallel_tool_calls is only supported by openai when tools are specified
             logging.warning("Parallel tool calls are not supported, setting parallel_tool_calls=False")
             kwargs["parallel_tool_calls"] = False
 
@@ -130,12 +130,9 @@ def asteroid_openai_client(
         raise ValueError("Invalid OpenAI client: missing chat attribute")
 
     try:
-
         # TODO - Clean up where this is instantiated
         client = Client(base_url=settings.api_url, headers={"X-Asteroid-Api-Key": f"{settings.api_key}"})
-        api_logger = APILogger(client)
-        supervision_runner = SupervisionRunner(client, api_logger)
-        supervision_manager = AsteroidChatSupervisionManager(client, api_logger, supervision_runner)
+        supervision_manager = _create_supervision_manager(client)
         openai_client.chat.completions = CompletionsWrapper(
             openai_client.chat.completions,
             supervision_manager,
@@ -147,37 +144,9 @@ def asteroid_openai_client(
         raise RuntimeError(f"Failed to wrap OpenAI client: {str(e)}") from e
 
 
-def check_config_validity(execution_settings):
-    if (execution_settings.get("execution_mode") == ExecutionMode.MONITORING
-            and execution_settings.get("rejection_policy") == RejectionPolicy.RESAMPLE_WITH_FEEDBACK):
-        raise ValueError("Monitoring mode does not support resample_with_feedback rejection policy")
-
-def asteroid_init(
-    project_name: str = "My Project",
-    task_name: str = "My Agent",
-    run_name: str = "My Run",
-    tools: Optional[List[Callable]] = None,
-    execution_settings: Dict[str, Any] = {},
-    chat_supervisors: Optional[List[List[Callable]]] = None
-) -> UUID:
-    """
-    Initializes supervision for a project, task, and run.
-    """
-    check_config_validity(execution_settings)
-
-    project_id = register_project(project_name)
-    print(f"Registered new project '{project_name}' with ID: {project_id}")
-    task_id = register_task(project_id, task_name)
-    print(f"Registered new task '{task_name}' with ID: {task_id}")
-    run_id = create_run(project_id, task_id, run_name)
-    print(f"Registered new run with ID: {run_id}")
-
-    register_tools_and_supervisors(run_id, tools, execution_settings, chat_supervisors)
-
-    return run_id
-
-def asteroid_end(run_id: UUID) -> None:
-    """
-    Stops supervision for a run.
-    """
-    submit_run_status(run_id, Status.COMPLETED)
+def _create_supervision_manager(client):
+    model_provider_helper = OpenAiSupervisionHelper()
+    api_logger = APILogger(client, model_provider_helper)
+    supervision_runner = SupervisionRunner(client, api_logger, model_provider_helper)
+    supervision_manager = AsteroidChatSupervisionManager(client, api_logger, supervision_runner, model_provider_helper)
+    return supervision_manager

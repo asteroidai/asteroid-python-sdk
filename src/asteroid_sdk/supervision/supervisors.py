@@ -15,6 +15,8 @@ import json
 from openai import OpenAI
 from openai.types.chat.chat_completion_message import ChatCompletionMessageToolCall
 
+from .model.tool_call import ToolCall
+
 client = OpenAI()
 
 class ToolCallSupervisor(Protocol):
@@ -72,7 +74,7 @@ DEFAULT_SYSTEM_PROMPT = (
     "Provide your decision along with an explanation."
 )
 
-def llm_supervisor(
+def openai_llm_supervisor(
     instructions: str,
     supervisor_name: Optional[str] = None,
     description: Optional[str] = None,
@@ -96,7 +98,7 @@ ModifiedData:
 
     def supervisor(
         tool: Tool,
-        tool_call: ChatCompletionMessageToolCall,
+        tool_call: ToolCall,
         supervision_context: SupervisionContext,
         ignored_attributes: list[str] = [],
         supervision_request_id: Optional[UUID] = None,
@@ -108,7 +110,7 @@ ModifiedData:
         """
         # Prepare tool arguments string
         tool_args = []
-        tool_kwargs = json.loads(tool_call.function.arguments)
+        tool_kwargs = tool_call.tool_params
         tool_args_str = ", ".join([f"{i}: {repr(arg)}" for i, arg in enumerate(tool_args)])
         tool_kwargs_str = ", ".join(
             [f"{k}={repr(v)}" for k, v in tool_kwargs.items() if k not in ignored_attributes] +
@@ -218,7 +220,7 @@ ModifiedData:
                 modified=None
             )
 
-    supervisor.__name__ = supervisor_name if supervisor_name else llm_supervisor.__name__
+    supervisor.__name__ = supervisor_name if supervisor_name else openai_llm_supervisor.__name__
     supervisor.__doc__ = description if description else supervisor.__doc__
     supervisor.supervisor_attributes = {
         "instructions": instructions,
@@ -245,7 +247,7 @@ def human_supervisor(
     """
     def supervisor(
         tool: Tool,
-        tool_call: ChatCompletionMessageToolCall,
+        tool_call: ToolCall,
         supervision_context: SupervisionContext,
         ignored_attributes: list[str] = [],
         supervision_request_id: Optional[UUID] = None,
@@ -257,7 +259,7 @@ def human_supervisor(
 
         Args:
             tool (Tool): The tool being supervised.
-            tool_call (ChatCompletionMessageToolCall): The tool call to be supervised.
+            tool_call (ToolCall): The tool call to be supervised.
             supervision_context (SupervisionContext): Additional context.
             ignored_attributes (List[str]): Attributes to ignore.
             supervision_request_id (Optional[UUID]): ID of the supervision request.
@@ -284,7 +286,7 @@ def auto_approve_supervisor() -> ToolCallSupervisor:
     """Creates a supervisor that automatically approves any input."""
     def supervisor(
         tool: Tool,
-        tool_call: ChatCompletionMessageToolCall,
+        tool_call: ToolCall,
         supervision_context: SupervisionContext,
         ignored_attributes: list[str] = [],
         supervision_request_id: Optional[UUID] = None,
@@ -306,7 +308,7 @@ def tool_supervisor_decorator(**config_kwargs) -> Callable:
         @wraps(func)
         def wrapper(
             tool: Tool,
-            tool_call: ChatCompletionMessageToolCall,
+            tool_call: ToolCall,
             supervision_context: SupervisionContext,
             ignored_attributes: list[str] = [],
             supervision_request_id: Optional[UUID] = None,
