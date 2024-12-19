@@ -21,7 +21,7 @@ from tests.helper.tools.google_search import get_google_search_tool_object_dict
 class AbstractAcceptanceTest(ABC, unittest.TestCase):
     def setUpGlobal(self, helper: ModelProviderHelper):
         self.mock_asteroid_client = MagicMock(Client)
-        self.api_logger = APILogger(self.mock_asteroid_client)
+        self.api_logger = APILogger(self.mock_asteroid_client, helper)
         self.model_provider_helper = helper
         self.supervision_runner = SupervisionRunner(
             self.mock_asteroid_client,
