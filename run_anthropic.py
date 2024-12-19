@@ -2,14 +2,19 @@ import json
 import os
 from typing import Any
 
+from anthropic import Anthropic
+from anthropic.types import ToolChoiceParam, ToolChoiceAutoParam, ToolParam
+
+from asteroid_sdk.wrappers.anthropic import asteroid_anthropic_client
+
 os.environ["ASTEROID_API_URL"] = "http://localhost:8080/api/v1"
 
 from asteroid_sdk.supervision.decorators import supervise
 from asteroid_sdk.supervision.config import SupervisionDecision, SupervisionDecisionType, ExecutionMode, RejectionPolicy, MultiSupervisorResolution
-from asteroid_sdk.supervision.supervisors import human_supervisor, llm_supervisor, tool_supervisor_decorator, chat_supervisor_decorator
+from asteroid_sdk.supervision.supervisors import human_supervisor, openai_llm_supervisor, tool_supervisor_decorator, chat_supervisor_decorator
 
-from asteroid_sdk.wrappers.openai import asteroid_openai_client, asteroid_init, asteroid_end
-from openai import OpenAI
+from asteroid_sdk.registration.initialise_project import asteroid_init, asteroid_end
+
 
 @tool_supervisor_decorator(strategy="reject") #TODO: Rethink the decorator design, it can't be configured with parameters in this way
 def supervisor1(
@@ -26,7 +31,7 @@ def supervisor1(
         return SupervisionDecision(decision=SupervisionDecisionType.REJECT)
 
 # Use the decorator
-@supervise(supervision_functions=[[llm_supervisor(instructions="Always escalate"), human_supervisor()]], ignored_attributes=["maximum_price"])
+@supervise(supervision_functions=[[openai_llm_supervisor(instructions="Always escalate"), human_supervisor()]], ignored_attributes=["maximum_price"])
 def book_flight(departure_city: str, arrival_city: str, datetime: str, maximum_price: float):
     """Book a flight ticket."""
     return f"Flight booked from {departure_city} to {arrival_city} on {datetime}."
@@ -48,57 +53,53 @@ def book_hotel(location: str, checkin: str, checkout: str, maximum_price: float)
     return f"Hotel booked in {location} from {checkin} to {checkout}."
 
 
-
-tools = [
+tools: list[ToolParam] = [
     {
-        "type": "function",
-        "function": {
-            "name": "get_weather",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "location": {"type": "string"},
-                    "unit": {"type": "string", "enum": ["c", "f"]},
-                },
-                "required": ["location", "unit"],
-                "additionalProperties": False,
+        "name": "get_weather",
+        "description": "Get the weather for a specific location",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location": {"type": "string"},
+                "unit": {"type": "string", "enum": ["c", "f"]},
             },
+            "required": ["location", "unit"],
+            "additionalProperties": False,
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "book_flight",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "departure_city": {"type": "string"},
-                    "arrival_city": {"type": "string"},
-                    "datetime": {"type": "string"},
-                    "maximum_price": {"type": "number"},
-                },
+        "name": "book_flight",
+        "description": "Book a flight ticket",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "departure_city": {"type": "string"},
+                "arrival_city": {"type": "string"},
+                "datetime": {"type": "string"},
+                "maximum_price": {"type": "number"},
             },
+            "required": ["departure_city", "arrival_city", "datetime", "maximum_price"],
+            "additionalProperties": False,
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "book_hotel",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "location": {"type": "string"},
-                    "checkin": {"type": "string"},
-                    "checkout": {"type": "string"},
-                    "maximum_price": {"type": "number"},
-                },
+        "name": "book_hotel",
+        "description": "Book a hotel",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location": {"type": "string"},
+                "checkin": {"type": "string"},
+                "checkout": {"type": "string"},
+                "maximum_price": {"type": "number"},
             },
+            "required": ["location", "checkin", "checkout", "maximum_price"],
+            "additionalProperties": False,
         },
     },
 ]
 
-
-client = OpenAI()
+client = Anthropic()
 
 EXECUTION_SETTINGS = {
     "execution_mode": ExecutionMode.SUPERVISION, # can be "monitoring" or "supervision", monitoring is async and supervision is sync by default
@@ -111,13 +112,13 @@ EXECUTION_SETTINGS = {
 
 for i in range(1):
     run_id = asteroid_init(
-        project_name="my-project",
+        project_name="anthropic",
         task_name="my-task",
         run_name="my-run",
         execution_settings=EXECUTION_SETTINGS
     )
     # When you wrap the client, all supervised functions will be registered
-    wrapped_client = asteroid_openai_client(client, run_id, EXECUTION_SETTINGS["execution_mode"])
+    wrapped_client = asteroid_anthropic_client(client, run_id, EXECUTION_SETTINGS["execution_mode"])
 
 # Initialize conversation history
 messages = []
@@ -130,18 +131,15 @@ for i in range(5):
     # Add user message to history
     messages.append({"role": "user", "content": user_input})
 
-    # Make API call
-    response = wrapped_client.chat.completions.create(
-        model="gpt-4o-mini",
+    response = wrapped_client.messages.create(
+        model="claude-3-opus-20240229",
+        max_tokens=1024,
         messages=messages,
         tools=tools,
-        tool_choice="auto",
-        temperature=0,
-        n=1,
-        parallel_tool_calls=False
+        tool_choice=ToolChoiceAutoParam(type="auto", disable_parallel_tool_use=True),
     )
-
-    assistant_message = response.choices[0].message
+    # Make API call
+    assistant_message = response.content
 
     # Add assistant's response to conversation history
     messages.append({"role": "assistant", "content": assistant_message.content, "tool_calls": assistant_message.tool_calls})

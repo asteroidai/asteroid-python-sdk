@@ -16,7 +16,7 @@ from asteroid_sdk.supervision.config import (
 )
 from asteroid_sdk.supervision.supervisors import (
     human_supervisor,
-    llm_supervisor,
+    openai_llm_supervisor,
     tool_supervisor_decorator,
     chat_supervisor_decorator
 )
@@ -39,7 +39,7 @@ EXECUTION_SETTINGS = {
 def chat_supervisor_1(message: str, supervision_context, **kwargs) -> SupervisionDecision:
     """
     Supervisor that allows any message.
-    
+
     :param message: The content of the message to supervise.
     :param supervision_context: Contextual information for supervision.
     :return: A SupervisionDecision indicating approval.
@@ -48,13 +48,13 @@ def chat_supervisor_1(message: str, supervision_context, **kwargs) -> Supervisio
         decision=SupervisionDecisionType.ESCALATE,
         explanation="The message is approved."
     )
-    
+
 # Example chat supervisor that rejects messages mentioning 'Tokyo'
 @chat_supervisor_decorator(strategy="reject")
 def chat_supervisor_2(message: str, supervision_context, **kwargs) -> SupervisionDecision:
     """
     Supervisor that rejects any message mentioning 'Tokyo' in the last user message.
-    
+
     :param message: The content of the message to supervise.
     :param supervision_context: Contextual information for supervision.
     :return: A SupervisionDecision indicating approval or rejection.
