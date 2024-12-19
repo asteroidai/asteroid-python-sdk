@@ -397,12 +397,14 @@ class SupervisionRunner:
             # Add feedback to the context based on the latest failed tool call and decisions
             feedback_message = self._get_feedback_message(failed_all_decisions, failed_tool_call)
 
-            updated_messages.append(
-                {
-                    "role": "user", # Changed to user- anthropic doesn't support additional roles when using tools
-                    "content": feedback_message
-                }
-            )
+            updated_messages.append({
+                "role": "assistant",  # Changed to user- anthropic doesn't support additional roles when using tools
+                "content": feedback_message
+            })
+            updated_messages.append({
+                "role": "user",
+                "content": "Please pay attention to the above feedback and try again."
+            })
 
             resampled_request_kwargs = copy.deepcopy(request_kwargs)
             resampled_request_kwargs["messages"] = updated_messages
