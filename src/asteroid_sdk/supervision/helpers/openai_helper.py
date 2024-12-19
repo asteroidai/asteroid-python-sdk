@@ -1,0 +1,87 @@
+import copy
+import datetime
+import json
+from typing import List
+from uuid import uuid4
+
+from openai.types.chat import ChatCompletion, ChatCompletionMessageToolCall, ChatCompletionMessage
+from openai.types.chat.chat_completion import Choice
+from openai.types.chat.chat_completion_message_tool_call import Function
+
+from asteroid_sdk.api.generated.asteroid_api_client.models import ChatFormat
+from asteroid_sdk.registration.helper import CHAT_TOOL_NAME
+from asteroid_sdk.supervision.model.tool_call import ToolCall
+
+
+class OpenAiSupervisionHelper:
+    def get_tool_call_from_response(self, response: ChatCompletion) -> List[ToolCall]:
+        tools = []
+
+        if not response.choices[0].message.tool_calls:
+            return tools
+
+        for tool_call in response.choices[0].message.tool_calls:
+            arguments = json.loads(tool_call.function.arguments)
+            call = ToolCall(
+                message_id=tool_call.id,
+                tool_name=tool_call.function.name,
+                tool_params=arguments,
+                language_model_tool_call=tool_call
+            )
+            tools.append(call)
+        return tools
+
+    def generate_fake_tool_call(self, response: ChatCompletion) -> ToolCall:
+        text_response = response.choices[0].message.content
+        arguments = {"message": text_response}
+        chat_tool_call = ChatCompletionMessageToolCall(
+            id=str(uuid4()),
+            function=Function(
+                name=CHAT_TOOL_NAME,
+                arguments=json.dumps(arguments)
+            ),
+            type='function'
+        )
+
+        return ToolCall(
+            message_id=chat_tool_call.id,
+            tool_name=chat_tool_call.function.name,
+            tool_params=arguments,
+            language_model_tool_call=chat_tool_call
+        )
+
+    def upsert_tool_call(self, response: ChatCompletion, tool_call: ChatCompletionMessageToolCall) -> ChatCompletion:
+        """
+        This method assumes that we only have one tool call in the response.choices[0].message.tool_calls. No protection
+        is added, so if there is more than 1 there, it'll overwrite them all
+
+        :param response: ChatCompletion
+        :param tool_call: ChatCompletionMessageToolCall
+        :return: ChatCompletion
+        """
+        response.choices[0].message.tool_calls = [tool_call]
+        return response
+
+    # Not sure about this implementation, maybe add a `response` from llm so we can just clone + modify that
+    def generate_new_response_with_rejection_message(self, rejection_message) -> ChatCompletion:
+        return ChatCompletion(
+            id=str(uuid4()),
+            choices=[
+                Choice(
+                    message=ChatCompletionMessage(
+                        content=rejection_message,
+                        tool_calls=[],
+                        role='assistant'
+                    ),
+                    finish_reason='stop',
+                    index=0,
+                )
+            ],
+            created=int(datetime.datetime.now().timestamp()),
+            model= 'n/a',
+            object= 'chat.completion',
+        )
+
+
+    def get_message_format(self) -> ChatFormat:
+        return ChatFormat.OPENAI

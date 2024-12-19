@@ -1,12 +1,16 @@
 from typing import Any, Dict, List, Optional, Callable
 from uuid import UUID
 
+from anthropic.types import Message
 from openai.types.chat.chat_completion import ChatCompletion
+
 from asteroid_sdk.api.api_logger import APILogger
 from asteroid_sdk.api.generated.asteroid_api_client import Client
 from asteroid_sdk.supervision.config import get_supervision_config
 from asteroid_sdk.api.supervision_runner import SupervisionRunner
 from asteroid_sdk.registration.helper import generate_fake_chat_tool_call
+from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProviderHelper
+from asteroid_sdk.supervision.model.tool_call import ToolCall
 
 
 class AsteroidLoggingError(Exception):
@@ -21,7 +25,8 @@ class AsteroidChatSupervisionManager:
             self,
             client: Client,
             api_logger: APILogger,
-            supervision_runner: SupervisionRunner
+            supervision_runner: SupervisionRunner,
+            model_provider_helper: ModelProviderHelper
     ):
         """
         Initialize the API logger with the given API key.
@@ -31,6 +36,8 @@ class AsteroidChatSupervisionManager:
         self.client = client
         self.api_logger = api_logger
         self.supervision_runner = supervision_runner
+        self.model_provider_helper = model_provider_helper
+
 
     def log_request(self, request_data: Dict[str, Any], run_id: UUID) -> None:
         """
@@ -44,14 +51,14 @@ class AsteroidChatSupervisionManager:
 
     def handle_language_model_interaction(
             self,
-            response: ChatCompletion,
+            response: ChatCompletion|Message, # TODO - Change this to use a generic maybe
             request_kwargs: Dict[str, Any],
             run_id: UUID,
             execution_mode: str,
             completions: Any,
             args: Any,
             chat_supervisors: Optional[List[List[Callable]]] = None
-    ) -> Optional[ChatCompletion]:
+    ) -> Optional[ChatCompletion]: # TODO - Change this to use a generic maybe
         """
         Send the raw response data to the Sentinel API, and process tool calls
         through supervision and resampling if necessary.
@@ -77,15 +84,9 @@ class AsteroidChatSupervisionManager:
         # Update messages on the supervision context
         supervision_context.update_messages(request_kwargs['messages'])
 
-        response_data = response if isinstance(response, dict) else response.to_dict()
-
-        # Process tool calls
-        response, response_data_tool_calls = self.process_tool_calls(
+        response, response_data_tool_calls = self.get_tool_calls_and_modify_response_if_necessary(
             response=response,
-            response_data=response_data,
             supervision_context=supervision_context,
-            request_kwargs=request_kwargs,
-            run_id=run_id,
             chat_supervisors=chat_supervisors
         )
 
@@ -96,10 +97,10 @@ class AsteroidChatSupervisionManager:
             request_kwargs,
             run_id,
         )
-        
-        if not response_data_tool_calls:
+
+        if not response_data_tool_calls: # TODO - THIS WAS WHERE IT WAS FAILING
             return None
-        
+
         choice_ids = create_new_chat_response.choice_ids
 
         # Extract execution settings from the supervision configuration
@@ -113,20 +114,17 @@ class AsteroidChatSupervisionManager:
             response_data_tool_calls=response_data_tool_calls,
             run_id=run_id,
             supervision_context=supervision_context,
-            chat_supervisors=chat_supervisors  
+            chat_supervisors=chat_supervisors
         )
 
         return new_response
 
-    def process_tool_calls(
+    def get_tool_calls_and_modify_response_if_necessary(
             self,
-            response: ChatCompletion,
-            response_data: Dict[str, Any],
+            response: Any,
             supervision_context: Any,
-            request_kwargs: Dict[str, Any],
-            run_id: UUID,
             chat_supervisors: Optional[List[List[Callable]]] = None,
-    ) -> tuple[ChatCompletion, Optional[List[Dict[str, Any]]]]:
+    ) -> tuple[Any, Optional[List[ToolCall]]]:
         """
         Process the tool calls from the response data. If no tool calls are found,
         handle accordingly based on the presence of chat supervisors.
@@ -137,7 +135,7 @@ class AsteroidChatSupervisionManager:
         :param chat_supervisors: A list of chat supervisor callables.
         :return: A tuple of (modified_response, response_data_tool_calls) or None.
         """
-        response_data_tool_calls = response_data.get('choices', [{}])[0].get('message', {}).get('tool_calls')
+        response_data_tool_calls = self.model_provider_helper.get_tool_call_from_response(response)
 
         if chat_supervisors and not response_data_tool_calls:
             # Use the extracted function to generate fake tool calls
@@ -145,7 +143,8 @@ class AsteroidChatSupervisionManager:
                 client=self.client,
                 response=response,
                 supervision_context=supervision_context,
-                chat_supervisors=chat_supervisors
+                chat_supervisors=chat_supervisors,
+                model_provider_helper=self.model_provider_helper
             )
             print("No tool calls found in response, but chat supervisors provided, executing chat supervisors")
 
