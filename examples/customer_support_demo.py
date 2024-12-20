@@ -5,6 +5,7 @@ from openai.types.chat.chat_completion_message_tool_call import ChatCompletionMe
 
 # Set the Asteroid API URL (replace with the actual URL if needed)
 os.environ["ASTEROID_API_URL"] = "http://localhost:8080/api/v1"
+os.environ["ASTEROID_API_KEY"] = "add key here"
 
 # Import Asteroid SDK components
 from asteroid_sdk.supervision.decorators import supervise
@@ -27,11 +28,26 @@ from asteroid_sdk.wrappers.openai import (
 )
 from openai import OpenAI
 from asteroid_sdk.supervision.config import SupervisionContext
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
+
+# Execution settings for Asteroid
+EXECUTION_SETTINGS = {
+    "execution_mode": ExecutionMode.SUPERVISION,
+    "allow_tool_modifications": True,
+    "rejection_policy": RejectionPolicy.RESAMPLE_WITH_FEEDBACK,
+    "n_resamples": 1,
+    "multi_supervisor_resolution": MultiSupervisorResolution.ALL_MUST_APPROVE,
+    "remove_feedback_from_context": True,
+}
 
 def _process_refund(customer_id: str, amount: float):
     """Process a refund for a customer."""
     # For demo purposes, just return a confirmation message
     return f"Refund of ${amount} processed for customer {customer_id}."
+
 
 
 # Define maximum allowed refund amount
@@ -138,7 +154,13 @@ def resolution_attempt_supervisor(
         )
 
 
-# Wrap the refund tool with supervision using the supervisors
+
+
+
+
+
+
+# Wrap the refund tool with Asteroid supervisors
 @supervise(
     supervision_functions=[
         [authentication_supervisor, human_supervisor()],
@@ -148,8 +170,9 @@ def resolution_attempt_supervisor(
     ]
 )
 def process_refund(customer_id: str, amount: float):
-    """Process a refund for a customer with supervision."""
+    """Process a refund for a customer"""
     return _process_refund(customer_id, amount)
+
 
 # Define the tool for the assistant
 tools = [
@@ -171,31 +194,56 @@ tools = [
     },
 ]
 
-# Initialize the OpenAI client
-client = OpenAI()
 
-# Execution settings for Asteroid
-EXECUTION_SETTINGS = {
-    "execution_mode": ExecutionMode.SUPERVISION,
-    "allow_tool_modifications": True,
-    "rejection_policy": RejectionPolicy.RESAMPLE_WITH_FEEDBACK,
-    "n_resamples": 1,
-    "multi_supervisor_resolution": MultiSupervisorResolution.ALL_MUST_APPROVE,
-    "remove_feedback_from_context": True,
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Initialize Asteroid run
-run_id = asteroid_init(
-    project_name="Customer Support Agent",
-    task_name="Refund Processing",
-    run_name="refund",
-    execution_settings=EXECUTION_SETTINGS
-)
+run_id = asteroid_init(project_name="Customer Support Agent", task_name="Refund Processing", 
+                       run_name="refund", execution_settings=EXECUTION_SETTINGS)
+
+# Initialize the OpenAI client
+client = OpenAI()
 
 # Wrap the OpenAI client with Asteroid
 wrapped_client = asteroid_openai_client(
     client, run_id, EXECUTION_SETTINGS["execution_mode"]
 )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Initialize conversation history with both user and assistant messages
 messages = [
@@ -222,6 +270,9 @@ response = wrapped_client.chat.completions.create(
 
 assistant_message = response.choices[0].message
 
+# remove the last message
+messages = messages[:-1]
+
 # Add assistant's response to conversation history
 messages.append({
     "role": "assistant",
@@ -246,6 +297,8 @@ if assistant_message.tool_calls:
             result = process_refund(**function_args)
 
         print(f"Function result: {result}")
+        
+        
 
         # Add the function response to messages
         messages.append({
@@ -254,6 +307,10 @@ if assistant_message.tool_calls:
             "content": str(result)
         })
         
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 messages.append({"role": "user", "content": "Yes, the shipping status is 'Not dispatched yet.'"})
 
 # Submit the final message to the supervisor

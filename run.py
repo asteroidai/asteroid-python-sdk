@@ -2,8 +2,6 @@ import json
 import os
 from typing import Any
 
-os.environ["ASTEROID_API_URL"] = "http://localhost:8080/api/v1"
-
 from asteroid_sdk.supervision.decorators import supervise
 from asteroid_sdk.supervision.config import SupervisionDecision, SupervisionDecisionType, ExecutionMode, RejectionPolicy, MultiSupervisorResolution
 from asteroid_sdk.supervision.supervisors import human_supervisor, llm_supervisor, tool_supervisor_decorator, chat_supervisor_decorator
@@ -11,7 +9,7 @@ from asteroid_sdk.supervision.supervisors import human_supervisor, llm_superviso
 from asteroid_sdk.wrappers.openai import asteroid_openai_client, asteroid_init, asteroid_end
 from openai import OpenAI
 
-@tool_supervisor_decorator(strategy="reject") #TODO: Rethink the decorator design, it can't be configured with parameters in this way
+@tool_supervisor_decorator(strategy="reject")
 def supervisor1(
     tool_call: dict,
     config_kwargs: dict[str, Any],
@@ -174,49 +172,3 @@ for i in range(5):
             })
 
 asteroid_end(run_id)
-
-
-
-# # Example chat supervisor that checks if 'Tokyo' is mentioned in the last message
-# @chat_supervisor_decorator(strategy="reject")
-# def chat_supervisor_1(message: dict, supervision_context, **kwargs) -> SupervisionDecision:
-#     """
-#     Supervisor that rejects any message mentioning 'Tokyo' in the last user message.
-#     """
-#     last_message = message.get('content', '')
-#     if 'Tokyo' in last_message:
-#         return SupervisionDecision(
-#             decision=SupervisionDecisionType.REJECT,
-#             explanation="The message mentions 'Tokyo', which is not allowed."
-#         )
-#     return SupervisionDecision(
-#         decision=SupervisionDecisionType.APPROVE,
-#         explanation="The message is approved."
-#     )
-
-# @chat_supervisor_decorator(strategy="allow")
-# def chat_supervisor_2(message: dict, supervision_context, **kwargs) -> SupervisionDecision:
-#     """
-#     Supervisor that allows any message.
-#     """
-#     return SupervisionDecision(
-#         decision=SupervisionDecisionType.APPROVE,
-#         explanation="The message is approved."
-#     )
-
-# # Bring your favourite LLM client
-# client = OpenAI()
-
-# # Initialize Asteroid
-# run_id = asteroid_init(project_name="chat-supervisor-test", task_name="chat-supervisor-test", run_name="chat-supervisor-test")
-
-# # Wrap your client
-# wrapped_client = asteroid_openai_client(client, run_id, chat_supervisors=[chat_supervisor_1, chat_supervisor_2])
-
-# response = wrapped_client.chat.completions.create(
-#     model="gpt-4o-mini",
-#     messages=[{"content": "Can you say Tokyo with 50% chance?", "role": "user"}],
-#     supervisors=[supervisor1, supervisor2]
-# )
-
-# print(response)
