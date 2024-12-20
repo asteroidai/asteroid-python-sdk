@@ -28,10 +28,6 @@ from asteroid_sdk.wrappers.openai import (
 )
 from openai import OpenAI
 from asteroid_sdk.supervision.config import SupervisionContext
-<<<<<<< Updated upstream
-=======
-
->>>>>>> Stashed changes
 
 # Execution settings for Asteroid
 EXECUTION_SETTINGS = {
@@ -307,10 +303,6 @@ if assistant_message.tool_calls:
             "content": str(result)
         })
         
-<<<<<<< Updated upstream
-=======
-
->>>>>>> Stashed changes
 messages.append({"role": "user", "content": "Yes, the shipping status is 'Not dispatched yet.'"})
 
 # Submit the final message to the supervisor
