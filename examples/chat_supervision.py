@@ -1,12 +1,9 @@
-import json
 import os
-from typing import Any
 
 # Set the Asteroid API URL environment variable
 os.environ["ASTEROID_API_URL"] = "http://localhost:8080/api/v1"
 
 # Import necessary modules and decorators from the Asteroid SDK
-from asteroid_sdk.supervision.decorators import supervise
 from asteroid_sdk.supervision.config import (
     SupervisionDecision,
     SupervisionDecisionType,
@@ -15,12 +12,10 @@ from asteroid_sdk.supervision.config import (
     MultiSupervisorResolution
 )
 from asteroid_sdk.supervision.supervisors import (
-    human_supervisor,
-    llm_supervisor,
-    tool_supervisor_decorator,
     chat_supervisor_decorator
 )
-from asteroid_sdk.wrappers.openai import asteroid_openai_client, asteroid_init, asteroid_end
+from asteroid_sdk.registration.initialise_project import asteroid_init, asteroid_end
+from asteroid_sdk.wrappers.openai import asteroid_openai_client
 from openai import OpenAI
 
 # Define execution settings for the supervision process
@@ -39,7 +34,7 @@ EXECUTION_SETTINGS = {
 def chat_supervisor_1(message: str, supervision_context, **kwargs) -> SupervisionDecision:
     """
     Supervisor that allows any message.
-    
+
     :param message: The content of the message to supervise.
     :param supervision_context: Contextual information for supervision.
     :return: A SupervisionDecision indicating approval.
@@ -48,13 +43,13 @@ def chat_supervisor_1(message: str, supervision_context, **kwargs) -> Supervisio
         decision=SupervisionDecisionType.ESCALATE,
         explanation="The message is approved."
     )
-    
+
 # Example chat supervisor that rejects messages mentioning 'Tokyo'
 @chat_supervisor_decorator(strategy="reject")
 def chat_supervisor_2(message: str, supervision_context, **kwargs) -> SupervisionDecision:
     """
     Supervisor that rejects any message mentioning 'Tokyo' in the last user message.
-    
+
     :param message: The content of the message to supervise.
     :param supervision_context: Contextual information for supervision.
     :return: A SupervisionDecision indicating approval or rejection.

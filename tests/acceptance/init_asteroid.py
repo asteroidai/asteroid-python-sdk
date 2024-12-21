@@ -1,14 +1,14 @@
 import uuid
 from http import HTTPStatus
-from typing import Any
+from typing import Any, List
 from typing import Dict
 from unittest.mock import MagicMock
 
 from asteroid_sdk.api.generated.asteroid_api_client import Client
+from asteroid_sdk.api.generated.asteroid_api_client.models import Tool
+from asteroid_sdk.registration.initialise_project import asteroid_init
 from asteroid_sdk.supervision.config import ExecutionMode, RejectionPolicy, MultiSupervisorResolution
-from asteroid_sdk.wrappers.openai import asteroid_init
 from tests.helper.api.mock_api import make_created_response, make_created_response_with_id, make_response
-from tests.helper.tools.get_weather import get_weather_tool_object_dict
 
 
 class InitAsteroidForTestsConfig:
@@ -17,18 +17,14 @@ class InitAsteroidForTestsConfig:
             project_id: uuid.UUID,
             task_id: uuid.UUID,
             run_id: uuid.UUID,
-            tool_id: uuid.UUID,
-            supervisor_id: uuid.UUID,
-            chain_id_1: uuid.UUID,
-            execution_settings: Dict[str, Any]
+            execution_settings: Dict[str, Any],
+            tool_list: List[Tool]
     ):
         self.project_id = project_id
         self.task_id = task_id
         self.run_id = run_id
-        self.tool_id = tool_id
-        self.supervisor_id = supervisor_id
-        self.chain_id_1 = chain_id_1
         self.execution_settings = execution_settings
+        self.tool_list = tool_list
 
 
 def init_asteroid_for_tests(client: MagicMock(Client), config_for_tests: InitAsteroidForTestsConfig) -> None:
@@ -49,15 +45,17 @@ def init_asteroid_for_tests(client: MagicMock(Client), config_for_tests: InitAst
     project_created_response = make_created_response_with_id(config_for_tests.project_id)
     task_created_response = make_created_response_with_id(config_for_tests.task_id)
     run_created_response = make_created_response_with_id(config_for_tests.run_id)
-    # src/asteroid_sdk/registration/helper.py:263
-    create_run_tool_response = make_response(
-        get_weather_tool_object_dict(config_for_tests.run_id, config_for_tests.tool_id).to_dict(),
-        HTTPStatus.CREATED
-    )
-    # src/asteroid_sdk/registration/helper.py:341
-    create_supervisor_response = make_created_response_with_id(config_for_tests.supervisor_id)
+    # src/asteroid_sdk/registration/helper.py:319
+    # create_run_tool_sync_detailed in helper
+    responses_that_need_to_happen_per_tool = []
+    for tool in config_for_tests.tool_list:
+        responses_that_need_to_happen_per_tool.append(make_response(tool.to_dict(), HTTPStatus.CREATED))
+        # This is a hack to use same ID for both tool and supervisor. Makes test easier. Not long term solution
+        responses_that_need_to_happen_per_tool.append(make_created_response_with_id(tool.id))
+        # This is a hack to use same ID for both tool and supervisor and chain. Makes test easier. Not long term solution
+        responses_that_need_to_happen_per_tool.append(make_created_response([str(tool.id)]))
+
     # src/asteroid_sdk/registration/helper.py:318
-    create_tool_supervisor_chains_response = make_created_response([str(config_for_tests.chain_id_1)])
 
     # Mocked out the API calls. This is going to be difficult to fix if not using a debugger, if we ever change
     #  how we do init
@@ -65,9 +63,7 @@ def init_asteroid_for_tests(client: MagicMock(Client), config_for_tests: InitAst
         project_created_response,
         task_created_response,
         run_created_response,
-        create_run_tool_response,
-        create_supervisor_response,
-        create_tool_supervisor_chains_response
+        *responses_that_need_to_happen_per_tool,
     ]
 
     EXECUTION_SETTINGS = {

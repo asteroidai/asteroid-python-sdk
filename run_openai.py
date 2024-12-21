@@ -4,9 +4,9 @@ from typing import Any
 
 from asteroid_sdk.supervision.decorators import supervise
 from asteroid_sdk.supervision.config import SupervisionDecision, SupervisionDecisionType, ExecutionMode, RejectionPolicy, MultiSupervisorResolution
-from asteroid_sdk.supervision.supervisors import human_supervisor, llm_supervisor, tool_supervisor_decorator, chat_supervisor_decorator
+from asteroid_sdk.supervision.supervisors import human_supervisor, openai_llm_supervisor, tool_supervisor_decorator, chat_supervisor_decorator
 
-from asteroid_sdk.wrappers.openai import asteroid_openai_client, asteroid_init, asteroid_end
+from asteroid_sdk.wrappers.openai import asteroid_openai_client
 from openai import OpenAI
 
 @tool_supervisor_decorator(strategy="reject")
@@ -24,7 +24,7 @@ def supervisor1(
         return SupervisionDecision(decision=SupervisionDecisionType.REJECT)
 
 # Use the decorator
-@supervise(supervision_functions=[[llm_supervisor(instructions="Always escalate"), human_supervisor()]], ignored_attributes=["maximum_price"])
+@supervise(supervision_functions=[[openai_llm_supervisor(instructions="Always escalate"), human_supervisor()]], ignored_attributes=["maximum_price"])
 def book_flight(departure_city: str, arrival_city: str, datetime: str, maximum_price: float):
     """Book a flight ticket."""
     return f"Flight booked from {departure_city} to {arrival_city} on {datetime}."
@@ -109,7 +109,7 @@ EXECUTION_SETTINGS = {
 
 for i in range(1):
     run_id = asteroid_init(
-        project_name="my-project",
+        project_name="openai",
         task_name="my-task",
         run_name="my-run",
         execution_settings=EXECUTION_SETTINGS

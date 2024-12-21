@@ -7,24 +7,28 @@ import json
 from typing import Any, Dict
 from uuid import UUID
 
-from asteroid_sdk.api.generated.asteroid_api_client import Client
-from asteroid_sdk.api.generated.asteroid_api_client.api.run.create_new_chat import (
-    sync_detailed as create_new_chat_sync_detailed,
-)
-from asteroid_sdk.api.generated.asteroid_api_client.models import ChatIds, AsteroidChat, ChatFormat
+from anthropic.types import Message
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_message import (
     ChatCompletionMessage,
 )
 
+from asteroid_sdk.api.generated.asteroid_api_client import Client
+from asteroid_sdk.api.generated.asteroid_api_client.api.run.create_new_chat import (
+    sync_detailed as create_new_chat_sync_detailed,
+)
+from asteroid_sdk.api.generated.asteroid_api_client.models import ChatIds, AsteroidChat, ChatFormat
+from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProviderHelper
+
 
 class APILogger:
-    def __init__(self, client: Client):
+    def __init__(self, client: Client, model_provider_helper: ModelProviderHelper):
         self.client = client
+        self.model_provider_helper = model_provider_helper
 
     def log_llm_interaction(
             self,
-            response: ChatCompletion,
+            response: ChatCompletion | Message,
             request_kwargs: Dict[str, Any],
             run_id: UUID,
     ) -> ChatIds:
@@ -37,7 +41,7 @@ class APILogger:
         body = AsteroidChat(
             response_data=response_data_base64,
             request_data=request_data_base64,
-            format_=ChatFormat.OPENAI
+            format_=self.model_provider_helper.get_message_format()
         )
 
         return self._send_chats_to_asteroid_api(run_id, body)
