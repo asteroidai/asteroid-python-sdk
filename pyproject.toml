@@ -17,7 +17,7 @@ asteroid_sdk = ["py.typed"]  # If you want to support type hints
 
 [project]
 name = "asteroid_sdk"
-version = "0.1.4"
+version = "0.1.6"
 description = "A Python SDK for Asteroid"
 authors = [
     { name = "Asteroid", email = "founders@asteroid.ai" }

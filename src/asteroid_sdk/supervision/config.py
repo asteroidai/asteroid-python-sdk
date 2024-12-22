@@ -13,8 +13,6 @@ from openai.types.chat.chat_completion_message import ChatCompletionMessageToolC
 from pydantic import BaseModel, Field
 import logging
 
-from asteroid_sdk.mocking.policies import MockPolicy
-
 PREFERRED_LLM_MODEL = "gpt-4o"
 DEFAULT_RUN_NAME = "default"
 
@@ -264,10 +262,7 @@ class Project(BaseModel):
 class SupervisionConfig:
     def __init__(self):
         self.global_supervision_functions: List[Callable] = []
-        self.global_mock_policy = MockPolicy.NO_MOCK
         self.override_local_policy = False
-        self.mock_responses: Dict[str, List[Any]] = {}
-        self.previous_calls: Dict[str, List[Any]] = {}
         self.llm = None
         self.client = None  # Sentinel API client
         self.execution_settings: Dict[str, Any] = {}
@@ -287,42 +282,8 @@ class SupervisionConfig:
     def set_llm(self, llm):
         self.llm = llm
 
-    def set_mock_policy(self, mock_policy: MockPolicy):
-        self.global_mock_policy = mock_policy
-
     def set_execution_settings(self, execution_settings: Dict[str, Any]):
         self.execution_settings = execution_settings
-
-    def load_previous_execution_log(self, log_file_path: str, log_format='langchain'):
-        """Load and process a previous execution log."""
-        with open(log_file_path, 'r') as f:
-            log_data = f.readlines()
-
-        if log_format == 'langchain':
-            for line in log_data:
-                try:
-                    entry = json.loads(line)
-                    if entry['event'] == 'on_tool_end':
-                        function_name = entry['data']['kwargs'].get('name')
-                        output = entry['data']['output']
-                        if function_name:
-                            if function_name not in self.previous_calls:
-                                self.previous_calls[function_name] = []
-                            self.previous_calls[function_name].append(output)
-                except json.JSONDecodeError:
-                    continue  # Skip lines that are not valid JSON
-        else:
-            raise ValueError(f"Unsupported log format: {log_format}")
-
-        # Update mock_responses with examples from previous calls
-        self.mock_responses = self.previous_calls.copy()
-
-    def get_mock_response(self, function_name: str) -> Any:
-        """Get a mock response for a specific function."""
-        if function_name in self.mock_responses:
-            return random.choice(self.mock_responses[function_name])
-        else:
-            raise ValueError(f"No mock responses available for function: {function_name}")
 
     # Project methods
     def add_project(self, project_name: str, project_id: UUID):
@@ -533,15 +494,6 @@ def get_supervision_context(run_id: UUID, project_name: Optional[str] = None, ta
 
 def set_global_supervision_functions(functions: List[Callable]):
     supervision_config.set_global_supervision_functions(functions)
-
-def set_global_mock_policy(mock_policy: MockPolicy, override_local_policy: bool = False):
-    supervision_config.set_mock_policy(mock_policy)
-    supervision_config.override_local_policy = override_local_policy
-
-def setup_sample_from_previous_calls(log_file_path: str):
-    """Set up the SAMPLE_FROM_PREVIOUS_CALLS mock policy."""
-    supervision_config.load_previous_execution_log(log_file_path)
-    set_global_mock_policy(MockPolicy.SAMPLE_PREVIOUS_CALLS, override_local_policy=True)
 
 # Global instance of SupervisionConfig
 supervision_config = SupervisionConfig()
