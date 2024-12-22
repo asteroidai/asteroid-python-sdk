@@ -32,12 +32,14 @@ from asteroid_sdk.api.generated.asteroid_api_client.api.supervision.get_supervis
 from asteroid_sdk.api.generated.asteroid_api_client.api.supervision.get_supervision_result import sync_detailed as get_supervision_result_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.supervisor.get_tool_supervisor_chains import sync_detailed as get_tool_supervisor_chains_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.update_run_status import sync_detailed as update_run_status_sync_detailed
+from asteroid_sdk.api.generated.asteroid_api_client.api.run.get_run import sync_detailed as get_run_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor import Supervisor
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor_chain import SupervisorChain
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervision_request import SupervisionRequest
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervision_result import SupervisionResult
 from asteroid_sdk.api.generated.asteroid_api_client.models.decision import Decision
 from asteroid_sdk.api.generated.asteroid_api_client.models.status import Status
+from asteroid_sdk.api.generated.asteroid_api_client.models.run import Run
 
 from asteroid_sdk.supervision.config import SupervisionContext, get_supervision_config
 from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProviderHelper, AvailableProviderResponses, \
@@ -64,10 +66,10 @@ class APIClientFactory:
         return cls._instance
 
  # Define the 'chat_tool' function
-CHAT_TOOL_NAME = "chat_tool"
-def chat_tool(message: str) -> None:
+MESSAGE_TOOL_NAME = "message_tool"
+def message_tool(message: str) -> None:
     """
-    A special tool to represent chat messages for supervision purposes.
+    A special tool to represent normal messages without tool calls for supervision purposes.
     """
     pass
 
@@ -217,6 +219,27 @@ def create_run(
     except Exception as e:
         raise ValueError(f"Failed to create run: {str(e)}")
 
+
+def get_run(run_id: UUID) -> Run:
+    """
+    Retrieves a run using the Sentinel API.
+
+    Args:
+        run_id (UUID): The ID of the run to retrieve.
+
+    Returns:
+        Union[ErrorResponse, Run]: The retrieved run or an error response.
+    """
+    
+    client = APIClientFactory.get_client()
+    try:
+        response = get_run_sync_detailed(run_id=run_id, client=client)
+        if not isinstance(response.parsed, Run):
+            raise Exception(f"Error retrieving run: {response.parsed}")
+        return response.parsed
+    except Exception as e:
+        raise Exception(f"Error retrieving run: {e}")
+
 def register_supervisor_chains(
     client,
     tool_id: UUID,
@@ -251,7 +274,7 @@ def register_tools_and_supervisors(
     run_id: UUID,
     tools: Optional[List[Callable]] = None,
     execution_settings: Dict[str, Any] = {},
-    chat_supervisors: Optional[List[List[Callable]]] = None
+    message_supervisors: Optional[List[Callable]] = None
 ):
     """
     Registers tools and supervisors with the backend API.
@@ -285,9 +308,9 @@ def register_tools_and_supervisors(
             else:
                 func_name = tool.__qualname__
                 supervised_functions[func_name] = supervision_context.supervised_functions_registry[func_name]
-    if chat_supervisors is not None:
-        supervision_context.add_supervised_function(chat_tool, supervision_functions=[chat_supervisors])
-        supervised_functions[CHAT_TOOL_NAME] = supervision_context.supervised_functions_registry[CHAT_TOOL_NAME]
+    if message_supervisors is not None:
+        supervision_context.add_supervised_function(message_tool, supervision_functions=[message_supervisors])
+        supervised_functions[MESSAGE_TOOL_NAME] = supervision_context.supervised_functions_registry[MESSAGE_TOOL_NAME]
 
 
     for tool_name, data in supervised_functions.items():
@@ -337,8 +360,8 @@ def register_tools_and_supervisors(
         supervisor_chain_ids: List[List[UUID]] = []
         if not supervision_functions:
             supervisor_chain_ids.append([])
-            from asteroid_sdk.supervision.supervisors import auto_approve_supervisor
-            supervisor_func = auto_approve_supervisor()
+            from asteroid_sdk.supervision.base_supervisors import auto_approve_supervisor
+            supervisor_func = auto_approve_supervisor
             supervisor_info: Dict[str, Any] = {
                 'func': supervisor_func,
                 'name': getattr(supervisor_func, '__name__', 'auto_approve_supervisor'),
@@ -351,7 +374,7 @@ def register_tools_and_supervisors(
             supervisor_chain_ids[0] = [supervisor_id]
         else:
             for idx, supervisor_func_list in enumerate(supervision_functions):
-                supervisor_chain_ids.append([]) if tool_name != CHAT_TOOL_NAME else supervisor_chain_ids
+                supervisor_chain_ids.append([]) if tool_name != MESSAGE_TOOL_NAME else supervisor_chain_ids
                 for supervisor_func in supervisor_func_list:
                     supervisor_info: Dict[str, Any] = {
                         'func': supervisor_func,
@@ -362,7 +385,7 @@ def register_tools_and_supervisors(
                         'supervisor_attributes': getattr(supervisor_func, 'supervisor_attributes', {})
                     }
                     supervisor_id = register_supervisor(client, supervisor_info, project_id, supervision_context)
-                    if tool_name != CHAT_TOOL_NAME:
+                    if tool_name != MESSAGE_TOOL_NAME:
                         supervisor_chain_ids[idx].append(supervisor_id)
 
         # Ensure tool_id is a UUID before proceeding
@@ -624,12 +647,12 @@ def submit_run_status(run_id: UUID, status: Status):
         raise
 
 
-def generate_fake_chat_tool_call(
+def generate_fake_message_tool_call(
         client: Client,
         response: AvailableProviderResponses, # Could maybe change this to be a union of openai + anthropic types?
         supervision_context: Any,
         model_provider_helper: ModelProviderHelper,
-        chat_supervisors: Optional[List[List[Callable]]] = None,
+        message_supervisors: Optional[List[List[Callable]]] = None,
 ) -> Tuple[AvailableProviderResponses, List[ToolCall]]: # Could maybe change this to be a union of openai + anthropic types?
     """
     Generate a fake chat tool call when no tool calls are present in the response.
@@ -638,31 +661,31 @@ def generate_fake_chat_tool_call(
     :param response: The original ChatCompletion response from the OpenAI API.
     :param supervision_context: The supervision context associated with the run.
     :param model_provider_helper: The model provider helper used to generate fake tool calls.
-    :param chat_supervisors: A list of chat supervisor callables. If provided, the supervisor chains will be registered with the Asteroid API.
+    :param message_supervisors: A list of message supervisor callables. If provided, the supervisor chains will be registered with the Asteroid API.
     :return: A tuple containing the modified response and the list of tool calls.
     """
-    print("No tool calls found in response, but chat supervisors provided, executing chat supervisors")
+    print("No tool calls found in response, but message supervisors provided, executing message supervisors")
 
     modified_response = copy.deepcopy(response)
     chat_tool_call = model_provider_helper.generate_fake_tool_call(modified_response)
 
     model_provider_helper.upsert_tool_call(modified_response, chat_tool_call.language_model_tool_call)
 
-    if chat_supervisors:
+    if message_supervisors:
         # Retrieve supervisor IDs based on the provided chat supervisors
-        chat_supervisor_ids = [
-            [supervision_context.get_supervisor_id_by_func(chat_supervisor) for chat_supervisor in chat_supervisors_chain]
-            for chat_supervisors_chain in chat_supervisors
+        message_supervisor_ids = [
+            [supervision_context.get_supervisor_id_by_func(message_supervisor) for message_supervisor in message_supervisors_chain]
+            for message_supervisors_chain in message_supervisors
         ]
 
         # Get the tool ID for the chat tool
-        tool_id = supervision_context.get_supervised_function_entry(CHAT_TOOL_NAME).get("tool_id")
+        tool_id = supervision_context.get_supervised_function_entry(MESSAGE_TOOL_NAME).get("tool_id")
 
         # Register the supervisor chains with the Asteroid API client
         register_supervisor_chains(
             client=client,
             tool_id=tool_id,
-            supervisor_chain_ids=chat_supervisor_ids
+            supervisor_chain_ids=message_supervisor_ids
         )
 
     return modified_response, [chat_tool_call]
