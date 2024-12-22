@@ -11,6 +11,7 @@ from inspect_ai.solver import TaskState
 from inspect_ai.tool import ToolCall
 from openai.types.chat.chat_completion_message import ChatCompletionMessageToolCall
 from pydantic import BaseModel, Field
+import logging
 
 from asteroid_sdk.mocking.policies import MockPolicy
 
@@ -81,35 +82,39 @@ class SupervisionContext:
     def add_metadata(self, key: str, value: Any):
         self.metadata[key] = value
 
-    def to_text(self) -> str:
+    def messages_to_text(self) -> str:
         """Converts the supervision context into a textual description."""
-        texts = []
+        
         with self.lock:
-            # Process LangChain events if any
-            if self.langchain_events:
-                texts.append("## LangChain Events:")
-                for event in self.langchain_events:
-                    event_description = self._describe_event(event)
-                    texts.append(event_description)
-
             # Process inspect_ai_state if it exists
             if self.inspect_ai_state:
-                inspect_ai_text = self._describe_inspect_ai_state()
-                texts.append(inspect_ai_text)
-
+                return self._describe_inspect_ai_state()
+                
             # Process OpenAI messages if any
             if self.openai_messages:
-                openai_text = self._describe_openai_messages()
-                texts.append(openai_text)
+                return self._describe_openai_messages()
+        logging.warning("No messages to convert to text")
+        return ""
 
-        return "\n\n".join(texts)
+    def _describe_openai_messages(self) -> str:
+        """Converts the openai_messages into a textual description."""
+        messages_text = []
+        for message in self.openai_messages:
+            role = message.get('role', 'Unknown').capitalize()
+            content = message.get('content', '').strip()
+            message_str = f"**{role}:**\n{content}" if content else f"**{role}:**"
 
-    def _describe_event(self, event: dict) -> str:
-        """Converts a single event into a textual description."""
-        event_type = event.get("event", "Unknown Event")
-        data = event.get("data", {})
-        description = f"### Event: {event_type}\nData:\n```json\n{json.dumps(data, indent=2)}\n```"
-        return description
+            # Handle tool calls if present
+            tool_calls = message.get('tool_calls', [])
+            if tool_calls:
+                for tool_call in tool_calls:
+                    function = tool_call.get('function', {})
+                    function_name = function.get('name', 'Unknown Function')
+                    arguments = function.get('arguments', '{}').strip()
+                    message_str += f"\n\n**Function Call:** `{function_name}`\n**Arguments:** {arguments}"
+
+            messages_text.append(message_str)
+        return "\n\n".join(messages_text)
 
     def _describe_inspect_ai_state(self) -> str:
         """Converts the inspect_ai_state into a textual description."""
@@ -126,7 +131,7 @@ class SupervisionContext:
         # Include messages
         texts.append("### Messages:")
         for message in state.messages:
-            message_text = self._describe_chat_message(message)
+            message_text = self._describe_inspect_ai_chat_message(message)
             texts.append(message_text)
 
         # Include output if available
@@ -136,7 +141,7 @@ class SupervisionContext:
 
         return "\n\n".join(texts)
 
-    def _describe_chat_message(self, message: ChatMessage) -> str:
+    def _describe_inspect_ai_chat_message(self, message: ChatMessage) -> str:
         """Converts a chat message into a textual description."""
         role = message.role.capitalize()
         text_content = message.text.strip()
@@ -145,12 +150,12 @@ class SupervisionContext:
         if isinstance(message, ChatMessageAssistant) and message.tool_calls:
             text += "\n\n**Tool Calls:**"
             for tool_call in message.tool_calls:
-                tool_call_description = self._describe_tool_call(tool_call)
+                tool_call_description = self._describe_inspect_ai_tool_call(tool_call)
                 text += f"\n{tool_call_description}"
 
         return text
 
-    def _describe_tool_call(self, tool_call: ToolCall) -> str:
+    def _describe_inspect_ai_tool_call(self, tool_call: ToolCall) -> str:
         """Converts a ToolCall into a textual description."""
         description = (
             f"- **Tool Call ID:** {tool_call.id}\n"
