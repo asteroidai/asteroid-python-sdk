@@ -9,7 +9,7 @@ from openai.types.chat.chat_completion import Choice
 from openai.types.chat.chat_completion_message_tool_call import Function
 
 from asteroid_sdk.api.generated.asteroid_api_client.models import ChatFormat
-from asteroid_sdk.registration.helper import CHAT_TOOL_NAME
+from asteroid_sdk.registration.helper import MESSAGE_TOOL_NAME
 from asteroid_sdk.supervision.model.tool_call import ToolCall
 
 
@@ -26,7 +26,8 @@ class OpenAiSupervisionHelper:
                 message_id=tool_call.id,
                 tool_name=tool_call.function.name,
                 tool_params=arguments,
-                language_model_tool_call=tool_call
+                language_model_tool_call=tool_call,
+                message=response.choices[0].message
             )
             tools.append(call)
         return tools
@@ -37,7 +38,7 @@ class OpenAiSupervisionHelper:
         chat_tool_call = ChatCompletionMessageToolCall(
             id=str(uuid4()),
             function=Function(
-                name=CHAT_TOOL_NAME,
+                name=MESSAGE_TOOL_NAME,
                 arguments=json.dumps(arguments)
             ),
             type='function'
@@ -47,7 +48,8 @@ class OpenAiSupervisionHelper:
             message_id=chat_tool_call.id,
             tool_name=chat_tool_call.function.name,
             tool_params=arguments,
-            language_model_tool_call=chat_tool_call
+            language_model_tool_call=chat_tool_call,
+            message=response.choices[0].message
         )
 
     def upsert_tool_call(self, response: ChatCompletion, tool_call: ChatCompletionMessageToolCall) -> ChatCompletion:

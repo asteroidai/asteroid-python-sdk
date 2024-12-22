@@ -5,8 +5,8 @@ from uuid import uuid4
 from anthropic.types import Message, ToolUseBlock, TextBlock, Usage
 
 from asteroid_sdk.api.generated.asteroid_api_client.models import ChatFormat
-from asteroid_sdk.registration.helper import CHAT_TOOL_NAME
 from asteroid_sdk.supervision.model.tool_call import ToolCall
+from asteroid_sdk.registration.helper import MESSAGE_TOOL_NAME
 
 
 class AnthropicSupervisionHelper:
@@ -18,40 +18,39 @@ class AnthropicSupervisionHelper:
                     message_id=content_block.id,
                     tool_name=content_block.name,
                     tool_params=content_block.input, # TODO Maybe amend types here
-                    language_model_tool_call=content_block
+                    language_model_tool_call=content_block,
+                    message=response
                 )
                 tools.append(tool_call)
 
         return tools
 
     def generate_fake_tool_call(self, response: Message) -> ToolCall:
+        assert isinstance(response.content[0], TextBlock)
         return ToolCall(
             message_id=response.id,
-            tool_name=CHAT_TOOL_NAME,
-            tool_params={"message": response.content[0]},
-            language_model_tool_call=response
+            tool_name=MESSAGE_TOOL_NAME,
+            tool_params={"message": response.content[0].text},
+            language_model_tool_call=ToolUseBlock(
+                id=response.id,
+                name=MESSAGE_TOOL_NAME,
+                input={"message": response.content[0].text},
+                type="tool_use"
+            ),
+            message=response
         )
 
     def upsert_tool_call(self, response: Message, tool_call: ToolUseBlock) -> Message:
         """
-        This method assumes that we only have one tool call in the response.choices[0].message.tool_calls. No protection
-        is added, so if there is more than 1 there, it'll overwrite them all.
+        This method assumes that we only have one TextBlock in the response.content and we want to replace it with the ToolUseBlock.
 
         :param response: Message
         :param tool_call: Message
         :return: Message
         """
-        for i, content_block in enumerate(response.content):
-            if type(content_block) == ToolUseBlock:
-                # Only change if a tool_call already exists
-                response.content[i] = tool_call
-                return response
-
-        # If no tool_call exist already, append it
-        response.content.append(tool_call)
-
+        response.content = [tool_call]
         return response
-
+        
     # Not sure about this implementation, maybe add a `response` from llm so we can just clone + modify that
     def generate_new_response_with_rejection_message(self, rejection_message) -> Message:
         text = TextBlock(
