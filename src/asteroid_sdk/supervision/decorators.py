@@ -3,7 +3,6 @@ from functools import wraps
 from uuid import UUID
 
 from .config import supervision_config
-from ..mocking.policies import MockPolicy
 from .config import SupervisionDecision, SupervisionContext
 from asteroid_sdk.supervision.protocols import Supervisor
 from openai.types.chat import ChatCompletionMessage
@@ -12,8 +11,6 @@ import functools
 
 
 def supervise(
-    mock_policy: Optional[MockPolicy] = None,
-    mock_responses: Optional[List[Any]] = None,
     supervision_functions: Optional[List[List[Callable]]] = None,
     ignored_attributes: Optional[List[str]] = None
 ):
@@ -21,8 +18,6 @@ def supervise(
     Decorator that supervises a function.
 
     Args:
-        mock_policy           (Optional[MockPolicy]): Mock policy to use. Defaults to None.
-        mock_responses        (Optional[List[Any]]): Mock responses to use. Defaults to None.
         supervision_functions (Optional[List[List[Callable]]]): Supervision functions to use. Defaults to None.
         ignored_attributes    (Optional[List[str]]): Ignored attributes. Defaults to None.
     """
