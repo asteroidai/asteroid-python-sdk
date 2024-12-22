@@ -2,8 +2,9 @@ from typing import Any, Callable, List, Optional, Dict
 from uuid import UUID
 
 from asteroid_sdk.api.generated.asteroid_api_client.models import Status
-from asteroid_sdk.registration.helper import create_run, register_project, register_task, \
-    register_tools_and_supervisors, submit_run_status
+from asteroid_sdk.registration.helper import (
+    create_run, register_project, register_task, register_tools_and_supervisors, submit_run_status
+)
 from asteroid_sdk.supervision.config import ExecutionMode, RejectionPolicy
 
 
@@ -13,7 +14,7 @@ def asteroid_init(
         run_name: str = "My Run",
         tools: Optional[List[Callable]] = None,
         execution_settings: Dict[str, Any] = {},
-        chat_supervisors: Optional[List[List[Callable]]] = None
+        message_supervisors: Optional[List[Callable]] = None
 ) -> UUID:
     """
     Initializes supervision for a project, task, and run.
@@ -27,7 +28,7 @@ def asteroid_init(
     run_id = create_run(project_id, task_id, run_name)
     print(f"Registered new run with ID: {run_id}")
 
-    register_tools_and_supervisors(run_id, tools, execution_settings, chat_supervisors)
+    register_tools_and_supervisors(run_id, tools, execution_settings, message_supervisors)
 
     return run_id
 

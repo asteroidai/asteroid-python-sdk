@@ -4,13 +4,6 @@ import json
 from typing import Any, Dict, List, Optional, Callable
 from uuid import UUID
 
-from anthropic.resources import Messages
-from openai.resources import Completions
-from openai.types.chat.chat_completion import ChatCompletion
-from openai.types.chat.chat_completion_message import (
-    ChatCompletionMessage,
-    ChatCompletionMessageToolCall,
-)
 
 from asteroid_sdk.api.api_logger import APILogger
 from asteroid_sdk.api.generated.asteroid_api_client import Client
@@ -22,8 +15,7 @@ from asteroid_sdk.registration.helper import (
     get_supervisor_chains_for_tool,
     send_supervision_request,
     send_supervision_result,
-    CHAT_TOOL_NAME,
-    generate_fake_chat_tool_call
+    generate_fake_message_tool_call
 )
 from asteroid_sdk.supervision import SupervisionContext
 from asteroid_sdk.supervision.config import ExecutionMode
@@ -34,9 +26,10 @@ from asteroid_sdk.supervision.config import (
     SupervisionDecisionType,
     get_supervision_config,
 )
-from asteroid_sdk.supervision.helpers.model_provider_helper import AvailableProviderResponses, \
-    AvailableProviderToolCalls, ModelProviderHelper
+from asteroid_sdk.supervision.helpers.model_provider_helper import AvailableProviderResponses, ModelProviderHelper
 from asteroid_sdk.supervision.model.tool_call import ToolCall
+from asteroid_sdk.utils.utils import load_template
+import jinja2
 
 
 class SupervisionRunner:
@@ -62,7 +55,7 @@ class SupervisionRunner:
             response_data_tool_calls: List[ToolCall],
             run_id: UUID,
             supervision_context: SupervisionContext,
-            chat_supervisors: Optional[List[List[Callable]]] = None
+            message_supervisors: Optional[List[List[Callable]]] = None
     ) -> AvailableProviderResponses:
         supervision_config = get_supervision_config()
         allow_tool_modifications = supervision_config.execution_settings.get('allow_tool_modifications', False)
@@ -125,7 +118,7 @@ class SupervisionRunner:
                         supervision_context=supervision_context,
                         multi_supervisor_resolution=multi_supervisor_resolution,
                         execution_mode=execution_mode,
-                        chat_supervisors=chat_supervisors
+                        message_supervisors=message_supervisors
                     )
                     # If resampled response contains tool calls (ie it succeeded), then succeed
                     new_response = resampled_response
@@ -374,13 +367,13 @@ class SupervisionRunner:
             supervision_context: Any,
             multi_supervisor_resolution: str,
             execution_mode: str,
-            chat_supervisors: Optional[List[List[Callable]]] = None
+            message_supervisors: Optional[List[List[Callable]]] = None
     ) -> Optional[AvailableProviderResponses]:
         """
         Handle rejected tool calls by attempting to resample responses with supervisor feedback.
 
-        :param tool_call: The original tool call.
-        :param all_decisions: All decisions from supervisors.
+        :param failed_tool_call: The original tool call.
+        :param failed_all_decisions: All decisions from supervisors.
         :param completions: The completions object.
         :param request_kwargs: The original request keyword arguments.
         :param args: Additional arguments.
@@ -389,21 +382,26 @@ class SupervisionRunner:
         :param supervision_context: The supervision context.
         :param multi_supervisor_resolution: How to resolve multiple supervisor decisions.
         :param execution_mode: The execution mode.
+        :param message_supervisors: The message supervisors to use for supervision.
         :return: A new ChatCompletionMessage if successful, else None.
         """
         updated_messages = copy.deepcopy(request_kwargs["messages"])
+
+        # Load the resample prompt template
+        resample_prompt_template = load_template('resample_prompt.jinja')
+        resample_prompt_content = jinja2.Template(resample_prompt_template).render()
 
         for resample in range(n_resamples):
             # Add feedback to the context based on the latest failed tool call and decisions
             feedback_message = self._get_feedback_message(failed_all_decisions, failed_tool_call)
 
             updated_messages.append({
-                "role": "assistant",  # Changed to user- anthropic doesn't support additional roles when using tools
+                "role": "assistant",
                 "content": feedback_message
             })
             updated_messages.append({
                 "role": "user",
-                "content": "Please pay attention to the above feedback and try again."
+                "content": resample_prompt_content
             })
 
             resampled_request_kwargs = copy.deepcopy(request_kwargs)
@@ -417,10 +415,10 @@ class SupervisionRunner:
             resampled_tool_calls = self.model_provider_helper.get_tool_call_from_response(resampled_response)
 
             if not resampled_tool_calls:
-                if chat_supervisors:
-                    print("No tool calls found in resampled response, but we have chat supervisors")
-                    # Create fake chat tool call
-                    resampled_response, resampled_tool_calls = generate_fake_chat_tool_call(
+                if message_supervisors:
+                    print("No tool calls found in resampled response, but we have message supervisors")
+                    # Create fake message tool call
+                    resampled_response, resampled_tool_calls = generate_fake_message_tool_call(
                         client=self.client,
                         response=resampled_response,
                         supervision_context=supervision_context,
@@ -443,7 +441,7 @@ class SupervisionRunner:
 
             # Run supervision again on the resampled tool call
             processed_tool_call, resampled_all_decisions, modified = self.process_tool_call(
-                tool_call=resampled_tool_calls[0], # Only allow one tool_call
+                tool_call=resampled_tool_calls[0],  # Only allow one tool_call
                 tool_id=resampled_tool_id,
                 tool_call_id=resampled_tool_call_id,
                 supervision_context=supervision_context,
@@ -462,18 +460,21 @@ class SupervisionRunner:
 
         # All resamples were rejected
         # Summarize all feedback into one message to send back
-        rejection_message = (
-            f"The agent requested to execute a function {failed_tool_call.tool_name} with arguments {failed_tool_call.tool_params} but it was rejected.\n"
-            f"We tried {n_resamples} times to get a valid response but it was rejected each time.\n"
-        )
+
+        # Build the explanations variable
         explanations = "\n".join([
             f"Resample {idx+1}: {message['content']}"
             for idx, message in enumerate(updated_messages[-n_resamples:])
         ])
-        rejection_message += f"Here is the feedback from the supervisor: \n{explanations}\n"
-        rejection_message += (
-            "This is not a message from the user but from a supervisor system that is helping the agent to improve its behavior. "
-            "You should try something else!"
+
+        # Load and render the rejection message template
+        rejection_template_content = load_template('rejection_message_template.jinja')
+        rejection_template = jinja2.Template(rejection_template_content)
+        rejection_message = rejection_template.render(
+            tool_name=failed_tool_call.tool_name,
+            tool_params=failed_tool_call.tool_params,
+            n_resamples=n_resamples,
+            explanations=explanations
         )
         # TODO - should we add a `Choice` in here- or just return the message? Currently, we're returning the message and
         #  putting it into an already existing choice- which means the `stop-reason` is not being overwritten
@@ -488,13 +489,13 @@ class SupervisionRunner:
             if decision.decision in [SupervisionDecisionType.REJECT, SupervisionDecisionType.ESCALATE,
                                      SupervisionDecisionType.TERMINATE]
         ])
-        # Create feedback message for the assistant
-        tool_name = failed_tool_call.tool_name
-        tool_kwargs = failed_tool_call.tool_params
-        feedback_message = (
-            f"User tried to execute tool: {tool_name} with arguments: {tool_kwargs}, but it was rejected by some supervisors. \n"
-            f"{feedback_from_supervisors} \n"
-            f"Please try again with the feedback!"
+        # Load and render the feedback message template
+        feedback_template_content = load_template('feedback_message_template.jinja')
+        feedback_template = jinja2.Template(feedback_template_content)
+        feedback_message = feedback_template.render(
+            tool_name=failed_tool_call.tool_name,
+            tool_params=failed_tool_call.tool_params,
+            feedback_from_supervisors=feedback_from_supervisors
         )
         return feedback_message
 
@@ -518,43 +519,20 @@ class SupervisionRunner:
         :param decision: The previous decision, if any.
         :return: The decision made by the supervisor.
         """
-        # Check if the supervisor function is chat supervisor
-        # TODO - Fix the blow to work with new ToolCall
-        if tool_call.tool_name == CHAT_TOOL_NAME:
-            # For chat supervisors, we expect one message argument to be passed in
-            if asyncio.iscoroutinefunction(supervisor_func):
-                decision = asyncio.run(
-                    supervisor_func(
-                        message=tool_call.tool_params["message"],
-                        supervision_context=supervision_context,
-                        supervision_request_id=supervision_request_id,
-                        previous_decision=decision
-                    )
-                )
-            else:
-                decision = supervisor_func(
-                    message=tool_call.tool_params["message"],
+        if asyncio.iscoroutinefunction(supervisor_func):
+            decision = asyncio.run(
+                supervisor_func(
+                    message=tool_call.message,
                     supervision_context=supervision_context,
                     supervision_request_id=supervision_request_id,
                     previous_decision=decision
                 )
+            )
         else:
-            if asyncio.iscoroutinefunction(supervisor_func):
-                decision = asyncio.run(
-                    supervisor_func(
-                        tool=tool,
-                        tool_call=tool_call,
-                        supervision_context=supervision_context,
-                        supervision_request_id=supervision_request_id,
-                        previous_decision=decision
-                    )
-                )
-            else:
-                decision = supervisor_func(
-                    tool=tool,
-                    tool_call=tool_call,
-                    supervision_context=supervision_context,
-                    supervision_request_id=supervision_request_id,
-                    previous_decision=decision
+            decision = supervisor_func(
+                message=tool_call.message,
+                supervision_context=supervision_context,
+                supervision_request_id=supervision_request_id,
+                previous_decision=decision
                 )
         return decision

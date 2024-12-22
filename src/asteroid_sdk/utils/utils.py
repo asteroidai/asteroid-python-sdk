@@ -2,7 +2,27 @@ from typing import Any, get_origin, get_args, Callable, Any, Union, Optional
 import random
 import string
 import inspect
+import importlib.resources
 
+def load_template(template_file: str, prompts_package: str = 'asteroid_sdk.supervision.prompts') -> str:
+    """
+    Load a Jinja template from the specified prompts package.
+
+    Args:
+        template_file (str): The filename of the Jinja template.
+        prompts_package (str): The package path where prompts are stored.
+
+    Returns:
+        str: The loaded template content.
+
+    Raises:
+        ValueError: If the template file is not found.
+    """
+    try:
+        with importlib.resources.open_text(prompts_package, template_file) as f:
+            return f.read()
+    except FileNotFoundError:
+        raise ValueError(f"Template file '{template_file}' not found in '{prompts_package}'.")
 
 def create_random_value(return_type: type) -> Any:
     origin = get_origin(return_type)

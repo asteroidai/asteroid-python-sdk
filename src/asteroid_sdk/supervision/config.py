@@ -11,8 +11,7 @@ from inspect_ai.solver import TaskState
 from inspect_ai.tool import ToolCall
 from openai.types.chat.chat_completion_message import ChatCompletionMessageToolCall
 from pydantic import BaseModel, Field
-
-from asteroid_sdk.mocking.policies import MockPolicy
+import logging
 
 PREFERRED_LLM_MODEL = "gpt-4o"
 DEFAULT_RUN_NAME = "default"
@@ -81,35 +80,39 @@ class SupervisionContext:
     def add_metadata(self, key: str, value: Any):
         self.metadata[key] = value
 
-    def to_text(self) -> str:
+    def messages_to_text(self) -> str:
         """Converts the supervision context into a textual description."""
-        texts = []
+        
         with self.lock:
-            # Process LangChain events if any
-            if self.langchain_events:
-                texts.append("## LangChain Events:")
-                for event in self.langchain_events:
-                    event_description = self._describe_event(event)
-                    texts.append(event_description)
-
             # Process inspect_ai_state if it exists
             if self.inspect_ai_state:
-                inspect_ai_text = self._describe_inspect_ai_state()
-                texts.append(inspect_ai_text)
-
+                return self._describe_inspect_ai_state()
+                
             # Process OpenAI messages if any
             if self.openai_messages:
-                openai_text = self._describe_openai_messages()
-                texts.append(openai_text)
+                return self._describe_openai_messages()
+        logging.warning("No messages to convert to text")
+        return ""
 
-        return "\n\n".join(texts)
+    def _describe_openai_messages(self) -> str:
+        """Converts the openai_messages into a textual description."""
+        messages_text = []
+        for message in self.openai_messages:
+            role = message.get('role', 'Unknown').capitalize()
+            content = message.get('content', '').strip()
+            message_str = f"**{role}:**\n{content}" if content else f"**{role}:**"
 
-    def _describe_event(self, event: dict) -> str:
-        """Converts a single event into a textual description."""
-        event_type = event.get("event", "Unknown Event")
-        data = event.get("data", {})
-        description = f"### Event: {event_type}\nData:\n```json\n{json.dumps(data, indent=2)}\n```"
-        return description
+            # Handle tool calls if present
+            tool_calls = message.get('tool_calls', [])
+            if tool_calls:
+                for tool_call in tool_calls:
+                    function = tool_call.get('function', {})
+                    function_name = function.get('name', 'Unknown Function')
+                    arguments = function.get('arguments', '{}').strip()
+                    message_str += f"\n\n**Function Call:** `{function_name}`\n**Arguments:** {arguments}"
+
+            messages_text.append(message_str)
+        return "\n\n".join(messages_text)
 
     def _describe_inspect_ai_state(self) -> str:
         """Converts the inspect_ai_state into a textual description."""
@@ -126,7 +129,7 @@ class SupervisionContext:
         # Include messages
         texts.append("### Messages:")
         for message in state.messages:
-            message_text = self._describe_chat_message(message)
+            message_text = self._describe_inspect_ai_chat_message(message)
             texts.append(message_text)
 
         # Include output if available
@@ -136,7 +139,7 @@ class SupervisionContext:
 
         return "\n\n".join(texts)
 
-    def _describe_chat_message(self, message: ChatMessage) -> str:
+    def _describe_inspect_ai_chat_message(self, message: ChatMessage) -> str:
         """Converts a chat message into a textual description."""
         role = message.role.capitalize()
         text_content = message.text.strip()
@@ -145,12 +148,12 @@ class SupervisionContext:
         if isinstance(message, ChatMessageAssistant) and message.tool_calls:
             text += "\n\n**Tool Calls:**"
             for tool_call in message.tool_calls:
-                tool_call_description = self._describe_tool_call(tool_call)
+                tool_call_description = self._describe_inspect_ai_tool_call(tool_call)
                 text += f"\n{tool_call_description}"
 
         return text
 
-    def _describe_tool_call(self, tool_call: ToolCall) -> str:
+    def _describe_inspect_ai_tool_call(self, tool_call: ToolCall) -> str:
         """Converts a ToolCall into a textual description."""
         description = (
             f"- **Tool Call ID:** {tool_call.id}\n"
@@ -259,10 +262,7 @@ class Project(BaseModel):
 class SupervisionConfig:
     def __init__(self):
         self.global_supervision_functions: List[Callable] = []
-        self.global_mock_policy = MockPolicy.NO_MOCK
         self.override_local_policy = False
-        self.mock_responses: Dict[str, List[Any]] = {}
-        self.previous_calls: Dict[str, List[Any]] = {}
         self.llm = None
         self.client = None  # Sentinel API client
         self.execution_settings: Dict[str, Any] = {}
@@ -282,42 +282,8 @@ class SupervisionConfig:
     def set_llm(self, llm):
         self.llm = llm
 
-    def set_mock_policy(self, mock_policy: MockPolicy):
-        self.global_mock_policy = mock_policy
-
     def set_execution_settings(self, execution_settings: Dict[str, Any]):
         self.execution_settings = execution_settings
-
-    def load_previous_execution_log(self, log_file_path: str, log_format='langchain'):
-        """Load and process a previous execution log."""
-        with open(log_file_path, 'r') as f:
-            log_data = f.readlines()
-
-        if log_format == 'langchain':
-            for line in log_data:
-                try:
-                    entry = json.loads(line)
-                    if entry['event'] == 'on_tool_end':
-                        function_name = entry['data']['kwargs'].get('name')
-                        output = entry['data']['output']
-                        if function_name:
-                            if function_name not in self.previous_calls:
-                                self.previous_calls[function_name] = []
-                            self.previous_calls[function_name].append(output)
-                except json.JSONDecodeError:
-                    continue  # Skip lines that are not valid JSON
-        else:
-            raise ValueError(f"Unsupported log format: {log_format}")
-
-        # Update mock_responses with examples from previous calls
-        self.mock_responses = self.previous_calls.copy()
-
-    def get_mock_response(self, function_name: str) -> Any:
-        """Get a mock response for a specific function."""
-        if function_name in self.mock_responses:
-            return random.choice(self.mock_responses[function_name])
-        else:
-            raise ValueError(f"No mock responses available for function: {function_name}")
 
     # Project methods
     def add_project(self, project_name: str, project_id: UUID):
@@ -528,15 +494,6 @@ def get_supervision_context(run_id: UUID, project_name: Optional[str] = None, ta
 
 def set_global_supervision_functions(functions: List[Callable]):
     supervision_config.set_global_supervision_functions(functions)
-
-def set_global_mock_policy(mock_policy: MockPolicy, override_local_policy: bool = False):
-    supervision_config.set_mock_policy(mock_policy)
-    supervision_config.override_local_policy = override_local_policy
-
-def setup_sample_from_previous_calls(log_file_path: str):
-    """Set up the SAMPLE_FROM_PREVIOUS_CALLS mock policy."""
-    supervision_config.load_previous_execution_log(log_file_path)
-    set_global_mock_policy(MockPolicy.SAMPLE_PREVIOUS_CALLS, override_local_policy=True)
 
 # Global instance of SupervisionConfig
 supervision_config = SupervisionConfig()
