@@ -5,12 +5,9 @@ Handles helper functions for registration with asteroid.
 from datetime import datetime, timezone
 import inspect
 from typing import Any, Callable, Dict, Optional, List, Tuple
-from uuid import UUID, uuid4
+from uuid import UUID
 import time
 import copy
-import json
-from openai.types.chat.chat_completion import ChatCompletion
-from openai.types.chat.chat_completion_message_tool_call import ChatCompletionMessageToolCall, Function
 
 from asteroid_sdk.api.generated.asteroid_api_client.client import Client
 from asteroid_sdk.api.generated.asteroid_api_client.models import CreateProjectBody, CreateTaskBody
@@ -42,14 +39,11 @@ from asteroid_sdk.api.generated.asteroid_api_client.models.status import Status
 from asteroid_sdk.api.generated.asteroid_api_client.models.run import Run
 
 from asteroid_sdk.supervision.config import SupervisionContext, get_supervision_config
-from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProviderHelper, AvailableProviderResponses, \
-    AvailableProviderToolCalls
+from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProviderHelper, AvailableProviderResponses
 from asteroid_sdk.supervision.model.tool_call import ToolCall
 from asteroid_sdk.utils.utils import get_function_code
 from asteroid_sdk.settings import settings
-
 from asteroid_sdk.supervision.config import SupervisionDecision, SupervisionDecisionType
-from langchain_core.tools.structured import StructuredTool
 
 class APIClientFactory:
     """Factory for creating API clients with proper authentication."""
@@ -301,13 +295,8 @@ def register_tools_and_supervisors(
         # Register only the provided tools
         supervised_functions = {}
         for tool in tools:
-            # Check if tool is StructuredTool
-            if isinstance(tool, StructuredTool):
-                func_name = tool.func.__qualname__
-                supervised_functions[func_name] = supervision_context.supervised_functions_registry[func_name]
-            else:
-                func_name = tool.__qualname__
-                supervised_functions[func_name] = supervision_context.supervised_functions_registry[func_name]
+            func_name = tool.__qualname__
+            supervised_functions[func_name] = supervision_context.supervised_functions_registry[func_name]
     if message_supervisors is not None:
         supervision_context.add_supervised_function(message_tool, supervision_functions=[message_supervisors])
         supervised_functions[MESSAGE_TOOL_NAME] = supervision_context.supervised_functions_registry[MESSAGE_TOOL_NAME]

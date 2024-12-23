@@ -32,7 +32,7 @@ class CompletionsWrapper:
         self.run_id = run_id
         self.execution_mode = execution_mode
 
-    def create(self, *args, message_supervisors: Optional[List[Callable]] = None, **kwargs) -> Any:
+    def create(self, *args, message_supervisors: Optional[List[List[Callable]]] = None, **kwargs) -> Any:
         # If parallel tool calls not set to false (or doesn't exist, defaulting to true), then raise an error.
         # Parallel tool calls do not work at the moment due to conflicts when trying to 'resample'
         if kwargs.get("tool_choice", False) and kwargs["tool_choice"]["disable_parallel_tool_use"] == False:
@@ -48,7 +48,7 @@ class CompletionsWrapper:
         else:
             raise ValueError(f"Invalid execution mode: {self.execution_mode}")
 
-    def create_sync(self, *args, message_supervisors: Optional[List[Callable]] = None, **kwargs) -> Any:
+    def create_sync(self, *args, message_supervisors: Optional[List[List[Callable]]] = None, **kwargs) -> Any:
         # Log the entire request payload
         try:
             self.chat_supervision_manager.log_request(kwargs, self.run_id)
@@ -63,7 +63,8 @@ class CompletionsWrapper:
             try:
                 new_response = self.chat_supervision_manager.handle_language_model_interaction(
                     response, request_kwargs=kwargs, run_id=self.run_id,
-                    execution_mode=self.execution_mode, completions=self._completions, args=args
+                    execution_mode=self.execution_mode, completions=self._completions, args=args,
+                    message_supervisors=message_supervisors, anthropic=True
                 )
                 if new_response is not None:
                     print(f"New response: {new_response}")
@@ -79,7 +80,7 @@ class CompletionsWrapper:
             except AsteroidLoggingError:
                 raise e
 
-    async def create_async(self, *args, message_supervisors: Optional[List[Callable]] = None, **kwargs) -> Any:
+    async def create_async(self, *args, message_supervisors: Optional[List[List[Callable]]] = None, **kwargs) -> Any:
         # Log the entire request payload asynchronously
         try:
             await asyncio.to_thread(self.chat_supervision_manager.log_request, kwargs, self.run_id)
@@ -109,7 +110,7 @@ class CompletionsWrapper:
                 self.chat_supervision_manager.handle_language_model_interaction, response, request_kwargs=kwargs,
                 run_id=self.run_id,
                 execution_mode=self.execution_mode, completions=self._completions, args=args,
-                message_supervisors=message_supervisors
+                message_supervisors=message_supervisors, anthropic=True #TODO: Figure out whether to have the anthropic flag here
             )
         except Exception as e:
             print(f"Warning: Failed to log response: {str(e)}")

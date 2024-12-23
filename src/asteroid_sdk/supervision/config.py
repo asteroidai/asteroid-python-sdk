@@ -63,7 +63,6 @@ class SupervisionContext:
     Context for supervision decisions. This is used to store the context of the currently active project including all tasks/runs.
     """
     def __init__(self, pending_functions: Optional[Dict[str, Dict[str, Any]]] = None):
-        self.langchain_events: List[dict] = []  # List to store all logged events
         self.lock = Lock()  # Ensure thread safety
         self.metadata: Dict[str, Any] = {}
         self.inspect_ai_state: Optional[TaskState] = None
@@ -72,10 +71,6 @@ class SupervisionContext:
         self.supervised_functions_registry: Dict[str, Dict[str, Any]] = pending_functions or {}
         self.registered_supervisors: Dict[str, UUID] = {}
         self.local_supervisors_by_id: Dict[UUID, Callable] = {}
-
-    def add_event(self, event: dict):
-        with self.lock:
-            self.langchain_events.append(event)
 
     def add_metadata(self, key: str, value: Any):
         self.metadata[key] = value

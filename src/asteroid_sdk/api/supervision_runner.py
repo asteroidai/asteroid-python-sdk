@@ -48,7 +48,7 @@ class SupervisionRunner:
             self,
             args: Any,
             choice_ids: List[ChoiceIds],
-            completions: AvailableProviderResponses, # TODO - THIS IS WRONG, it should be API client, not responses
+            completions: Any, # TODO - THIS IS WRONG, it should be API client, not responses
             execution_mode: str,
             request_kwargs: Dict[str, Any],
             response: AvailableProviderResponses,
