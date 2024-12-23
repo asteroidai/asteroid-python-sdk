@@ -4,20 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = [
-    "asteroid_sdk",
-    "asteroid_sdk.supervision",
-    "asteroid_sdk.registration",
-    "asteroid_sdk.utils",
-    "asteroid_sdk.wrappers"
-]
+packages = { find = { where = ["src"], exclude = ["tests*", "logs*"] } }
+
+# Include package data
+include-package-data = true
 
 [tool.setuptools.package-data]
-asteroid_sdk = ["py.typed"]  # If you want to support type hints
+"asteroid_sdk.supervision.prompts" = ["*.jinja"]
 
 [project]
 name = "asteroid_sdk"
-version = "0.1.6"
+version = "0.1.12"
 description = "A Python SDK for Asteroid"
 authors = [
     { name = "Asteroid", email = "founders@asteroid.ai" }
