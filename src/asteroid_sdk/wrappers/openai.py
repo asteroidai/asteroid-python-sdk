@@ -65,7 +65,7 @@ class CompletionsWrapper:
                 new_response = self.chat_supervision_manager.handle_language_model_interaction(
                     response, request_kwargs=kwargs, run_id=self.run_id,
                     execution_mode=self.execution_mode, completions=self._completions, args=args,
-                    chat_supervisors=chat_supervisors
+                    message_supervisors=message_supervisors
                 )
                 if new_response is not None:
                     print(f"New response: {new_response}")

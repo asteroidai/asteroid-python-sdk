@@ -11,7 +11,7 @@ from asteroid_sdk.api.supervision_runner import SupervisionRunner
 from asteroid_sdk.registration.helper import generate_fake_message_tool_call
 from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProviderHelper
 from asteroid_sdk.supervision.model.tool_call import ToolCall
-
+from asteroid_sdk.api.generated.asteroid_api_client.models import ChatFormat
 
 class AsteroidLoggingError(Exception):
     """Raised when there's an error logging to Asteroid API."""
@@ -82,7 +82,9 @@ class AsteroidChatSupervisionManager:
 
         supervision_context = run.supervision_context
         # Update messages on the supervision context
-        supervision_context.update_messages(request_kwargs['messages'])
+        supervision_context.update_messages(request_kwargs['messages'], 
+                                            anthropic=self.model_provider_helper.get_message_format() == ChatFormat.ANTHROPIC,
+                                            system_message=request_kwargs.get('system', None))
 
         response, response_data_tool_calls = self.get_tool_calls_and_modify_response_if_necessary(
             response=response,
@@ -116,6 +118,8 @@ class AsteroidChatSupervisionManager:
             supervision_context=supervision_context,
             message_supervisors=message_supervisors
         )
+        # We need to check if the the new response is our fake message tool call and change it to a normal message
+        new_response = self.model_provider_helper.generate_message_from_fake_tool_call(new_response)
 
         return new_response
 

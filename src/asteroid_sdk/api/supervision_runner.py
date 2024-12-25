@@ -58,17 +58,17 @@ class SupervisionRunner:
             message_supervisors: Optional[List[List[Callable]]] = None
     ) -> AvailableProviderResponses:
         supervision_config = get_supervision_config()
-        allow_tool_modifications = supervision_config.execution_settings.get('allow_tool_modifications', False)
+        allow_message_modifications = supervision_config.execution_settings.get('allow_message_modifications', False)
         rejection_policy = supervision_config.execution_settings.get('rejection_policy', 'resample_with_feedback')
-        n_resamples = supervision_config.execution_settings.get('n_resamples', 3)
+        n_resamples = supervision_config.execution_settings.get('n_resamples', 1)
         multi_supervisor_resolution = supervision_config.execution_settings.get('multi_supervisor_resolution', 'all_must_approve')
 
         new_response = copy.deepcopy(response)
         # !IMPORTANT! - We're only accepting 1 tool_call ATM. There's code that is called within this
         # this loop that assumes this.
         for idx, tool_call in enumerate(response_data_tool_calls):
-            tool_id = choice_ids[0].tool_call_ids[idx].tool_id
-            tool_call_id = choice_ids[0].tool_call_ids[idx].tool_call_id
+            tool_id = UUID(choice_ids[0].tool_call_ids[idx].tool_id)
+            tool_call_id = UUID(choice_ids[0].tool_call_ids[idx].tool_call_id)
 
             # Process the tool call with supervision
             processed_tool_call, all_decisions, modified = self.process_tool_call(
@@ -76,7 +76,7 @@ class SupervisionRunner:
                 tool_id=tool_id,
                 tool_call_id=tool_call_id,
                 supervision_context=supervision_context,
-                allow_tool_modifications=allow_tool_modifications,
+                allow_message_modifications=allow_message_modifications,
                 multi_supervisor_resolution=multi_supervisor_resolution,
                 execution_mode=execution_mode
             )
@@ -95,7 +95,7 @@ class SupervisionRunner:
                     tool_id=tool_id,
                     tool_call_id=tool_call_id,
                     supervision_context=supervision_context,
-                    allow_tool_modifications=False,
+                    allow_message_modifications=False,
                     multi_supervisor_resolution=multi_supervisor_resolution,
                     execution_mode=execution_mode
                 )
@@ -134,10 +134,10 @@ class SupervisionRunner:
     def process_tool_call(
             self,
             tool_call: ToolCall,
-            tool_id: str,
-            tool_call_id: str,
+            tool_id: UUID,
+            tool_call_id: UUID,
             supervision_context: Any,
-            allow_tool_modifications: bool,
+            allow_message_modifications: bool,
             multi_supervisor_resolution: str,
             execution_mode: str
     ) -> tuple[Optional[ToolCall], Any, bool]:
@@ -148,6 +148,7 @@ class SupervisionRunner:
         :param tool_id: The ID of the tool being called.
         :param tool_call_id: The ID of the tool call.
         :param supervision_context: The context for supervision.
+        :param allow_message_modifications: Whether to allow message modifications.
         :param multi_supervisor_resolution: How to resolve multiple supervisor decisions.
         :return: A tuple containing the processed tool call, decisions, and modification status.
         """
@@ -183,7 +184,7 @@ class SupervisionRunner:
         ):
             # Approved
             return tool_call, supervisor_chain_decisions, False
-        elif allow_tool_modifications and final_supervisor_chain_decisions[-1].decision == SupervisionDecisionType.MODIFY:
+        elif allow_message_modifications and final_supervisor_chain_decisions[-1].decision == SupervisionDecisionType.MODIFY:
             # Modified
             return final_supervisor_chain_decisions[-1].modified.openai_tool_call, supervisor_chain_decisions, True
         else:
@@ -209,7 +210,7 @@ class SupervisionRunner:
             supervisors_chains: Any,
             tool: Tool,
             tool_call: ToolCall,
-            tool_call_id: str,
+            tool_call_id: UUID,
             supervision_context: Any,
             multi_supervisor_resolution: str,
             execution_mode: str
@@ -255,9 +256,9 @@ class SupervisionRunner:
             supervisor_chain: Any,
             tool: Tool,
             tool_call: ToolCall,
-            tool_call_id: str,
+            tool_call_id: UUID,
             supervision_context: Any,
-            supervisor_chain_id: str,
+            supervisor_chain_id: UUID,
             execution_mode: str
     ) -> List[SupervisionDecision]:
         """
@@ -442,10 +443,10 @@ class SupervisionRunner:
             # Run supervision again on the resampled tool call
             processed_tool_call, resampled_all_decisions, modified = self.process_tool_call(
                 tool_call=resampled_tool_calls[0],  # Only allow one tool_call
-                tool_id=resampled_tool_id,
-                tool_call_id=resampled_tool_call_id,
+                tool_id=UUID(resampled_tool_id),
+                tool_call_id=UUID(resampled_tool_call_id),
                 supervision_context=supervision_context,
-                allow_tool_modifications=False,
+                allow_message_modifications=False,
                 multi_supervisor_resolution=multi_supervisor_resolution,
                 execution_mode=execution_mode
             )

@@ -110,7 +110,7 @@ class CompletionsWrapper:
                 self.chat_supervision_manager.handle_language_model_interaction, response, request_kwargs=kwargs,
                 run_id=self.run_id,
                 execution_mode=self.execution_mode, completions=self._completions, args=args,
-                message_supervisors=message_supervisors, anthropic=True #TODO: Figure out whether to have the anthropic flag here
+                message_supervisors=message_supervisors
             )
         except Exception as e:
             print(f"Warning: Failed to log response: {str(e)}")

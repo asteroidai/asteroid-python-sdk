@@ -19,7 +19,7 @@ class AnthropicSupervisionHelper:
                     tool_name=content_block.name,
                     tool_params=content_block.input, # TODO Maybe amend types here
                     language_model_tool_call=content_block,
-                    message=response
+                    message=copy.deepcopy(response)
                 )
                 tools.append(tool_call)
 
@@ -37,8 +37,14 @@ class AnthropicSupervisionHelper:
                 input={"message": response.content[0].text},
                 type="tool_use"
             ),
-            message=response
+            message=copy.deepcopy(response)
         )
+
+    def generate_message_from_fake_tool_call(self, response: Message) -> Message:
+        if isinstance(response.content[0], ToolUseBlock) and response.content[0].name == MESSAGE_TOOL_NAME:
+            assert isinstance(response.content[0].input, dict)
+            response.content = [TextBlock(text=response.content[0].input["message"], type="text")]
+        return response
 
     def upsert_tool_call(self, response: Message, tool_call: ToolUseBlock) -> Message:
         """

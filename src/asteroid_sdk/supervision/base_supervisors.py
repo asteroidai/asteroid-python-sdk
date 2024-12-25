@@ -333,7 +333,7 @@ def json_output_supervisor(
 
         # --- [Validate using Pydantic model] ---
         try:
-            parsed_output = expected_schema.parse_obj(json_output)
+            parsed_output = expected_schema.model_validate(json_output)
         except ValidationError as e:
             explanation = f"JSON output validation error: {e}"
             return SupervisionDecision(

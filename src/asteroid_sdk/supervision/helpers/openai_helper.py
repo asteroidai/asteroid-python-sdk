@@ -27,7 +27,7 @@ class OpenAiSupervisionHelper:
                 tool_name=tool_call.function.name,
                 tool_params=arguments,
                 language_model_tool_call=tool_call,
-                message=response.choices[0].message
+                message=copy.deepcopy(response.choices[0].message)
             )
             tools.append(call)
         return tools
@@ -49,8 +49,14 @@ class OpenAiSupervisionHelper:
             tool_name=chat_tool_call.function.name,
             tool_params=arguments,
             language_model_tool_call=chat_tool_call,
-            message=response.choices[0].message
+            message=copy.deepcopy(response.choices[0].message)
         )
+
+    def generate_message_from_fake_tool_call(self, response: ChatCompletion) -> ChatCompletion:
+        if response.choices[0].message.tool_calls and isinstance(response.choices[0].message.tool_calls[0], ChatCompletionMessageToolCall) and response.choices[0].message.tool_calls[0].function.name == MESSAGE_TOOL_NAME:
+            response.choices[0].message.content = json.loads(response.choices[0].message.tool_calls[0].function.arguments)["message"]
+            response.choices[0].message.tool_calls = []
+        return response
 
     def upsert_tool_call(self, response: ChatCompletion, tool_call: ChatCompletionMessageToolCall) -> ChatCompletion:
         """
