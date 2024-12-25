@@ -15,7 +15,7 @@ from asteroid_sdk.api.supervision_runner import SupervisionRunner
 from asteroid_sdk.settings import settings
 from asteroid_sdk.supervision.config import ExecutionMode
 from asteroid_sdk.supervision.helpers.anthropic_helper import AnthropicSupervisionHelper
-
+import traceback
 
 class CompletionsWrapper:
     """Wraps chat completions with logging capabilities"""
@@ -62,15 +62,20 @@ class CompletionsWrapper:
             # SYNC LOGGING + SUPERVISION
             try:
                 new_response = self.chat_supervision_manager.handle_language_model_interaction(
-                    response, request_kwargs=kwargs, run_id=self.run_id,
-                    execution_mode=self.execution_mode, completions=self._completions, args=args,
-                    message_supervisors=message_supervisors, anthropic=True
+                    response,
+                    request_kwargs=kwargs,
+                    run_id=self.run_id,
+                    execution_mode=self.execution_mode,
+                    completions=self._completions,
+                    args=args,
+                    message_supervisors=message_supervisors
                 )
                 if new_response is not None:
                     print(f"New response: {new_response}")
                     return new_response
             except Exception as e:
                 print(f"Warning: Failed to log response: {str(e)}")
+                traceback.print_exc()
 
             return response
 
@@ -114,6 +119,7 @@ class CompletionsWrapper:
             )
         except Exception as e:
             print(f"Warning: Failed to log response: {str(e)}")
+            traceback.print_exc()
 
 
 def asteroid_anthropic_client(

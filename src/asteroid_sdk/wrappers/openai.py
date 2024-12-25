@@ -6,6 +6,7 @@ import asyncio
 import logging
 from typing import Any, Callable, List, Optional
 from uuid import UUID
+import traceback
 
 from openai import OpenAIError
 
@@ -72,6 +73,7 @@ class CompletionsWrapper:
                     return new_response
             except Exception as e:
                 print(f"Warning: Failed to log response: {str(e)}")
+                traceback.print_exc()
 
             return response
 
@@ -87,6 +89,7 @@ class CompletionsWrapper:
             await asyncio.to_thread(self.chat_supervision_manager.log_request, kwargs, self.run_id)
         except AsteroidLoggingError as e:
             print(f"Warning: Failed to log request: {str(e)}")
+            traceback.print_exc()
 
         try:
             # Make API call synchronously
