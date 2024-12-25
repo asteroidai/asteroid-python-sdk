@@ -10,6 +10,7 @@ from inspect_ai.model import ChatMessage, ChatMessageAssistant
 from inspect_ai.solver import TaskState
 from inspect_ai.tool import ToolCall
 from openai.types.chat.chat_completion_message import ChatCompletionMessageToolCall
+from anthropic.types import Message, TextBlock, ToolUseBlock
 from pydantic import BaseModel, Field
 import logging
 
@@ -32,6 +33,8 @@ class RejectionPolicy(str, Enum):
 
 class MultiSupervisorResolution(str, Enum):
     ALL_MUST_APPROVE = "all_must_approve"
+    #TODO: We will support more complex resolution strategies in the future
+    
 
 
 class ModifiedData(BaseModel):
@@ -82,10 +85,12 @@ class SupervisionContext:
             # Process inspect_ai_state if it exists
             if self.inspect_ai_state:
                 return self._describe_inspect_ai_state()
-                
             # Process OpenAI messages if any
             if self.openai_messages:
                 return self._describe_openai_messages()
+            elif self.anthropic_messages:
+                return self._describe_anthropic_messages()
+            
         logging.warning("No messages to convert to text")
         return ""
 
@@ -107,6 +112,37 @@ class SupervisionContext:
                     message_str += f"\n\n**Function Call:** `{function_name}`\n**Arguments:** {arguments}"
 
             messages_text.append(message_str)
+        return "\n\n".join(messages_text)
+    
+    
+    def _describe_anthropic_messages(self) -> str:
+        """Converts the anthropic_messages into a textual description, including tool calls."""
+        messages_text = []
+        for message in self.anthropic_messages:
+            role = message.get('role', 'Unknown').capitalize()
+            contents = message.get('content', [])
+                        
+            message_str = f"**{role}:**"
+            
+            if isinstance(contents, str):
+                message_str += f"\n{contents}"
+            else:
+                for content_block in contents:
+                    if isinstance(content_block, str):
+                        message_str += f"\n{content_block}"
+                    elif isinstance(content_block, TextBlock):
+                        text = content_block.text.strip()
+                        if text:
+                            message_str += f"\n{text}"
+                    elif isinstance(content_block, ToolUseBlock):
+                        tool_name = content_block.name
+                        tool_args = content_block.input
+                        message_str += f"\n\n**Tool Use:** `{tool_name}`\n**Arguments:** {json.dumps(tool_args, indent=2)}"
+                    else:
+                        message_str += f"\n\n**Unknown Content Block Type:** {type(content_block)}"
+            
+            messages_text.append(message_str)
+        
         return "\n\n".join(messages_text)
 
     def _describe_inspect_ai_state(self) -> str:
@@ -212,13 +248,19 @@ class SupervisionContext:
         with self.lock:
             return self.registered_supervisors.get(supervisor_name)
 
-    def update_messages(self, messages: List[Dict[str, Any]], anthropic: bool = False):
+    def update_messages(self, messages: List[Dict[str, Any]], anthropic: bool = False, system_message: Optional[str] = None):
         """Updates the context with a list of OpenAI messages."""
+        if system_message:
+            # Anthropic stores the system message outside of the messages list
+            final_messages = [{"role": "system", "content": system_message}] + messages.copy()
+        else:
+            final_messages = messages.copy()
+        
         with self.lock:
             if anthropic:
-                self.anthropic_messages = messages.copy()
+                self.anthropic_messages = final_messages
             else:
-                self.openai_messages = messages.copy()
+                self.openai_messages = final_messages
 
     def add_local_supervisor(self, supervisor_id: UUID, supervisor_func: Callable, supervisor_name: str):
         """Add a supervisor function to the config."""
