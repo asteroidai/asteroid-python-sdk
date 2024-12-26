@@ -2,13 +2,7 @@ from typing import Optional, Protocol, Union
 from uuid import UUID
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
 from anthropic.types import Message
-from .config import (
-    SupervisionDecision,
-    SupervisionDecisionType,
-    SupervisionContext,
-    PREFERRED_LLM_MODEL,
-    ModifiedData,
-)
+from .config import SupervisionDecision, SupervisionContext
         
 class Supervisor(Protocol):
     """

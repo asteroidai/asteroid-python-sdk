@@ -6,9 +6,7 @@ from asteroid_sdk.registration.helper import get_human_supervision_decision_api
 from .config import (
     SupervisionDecision,
     SupervisionDecisionType,
-    SupervisionContext,
-    PREFERRED_LLM_MODEL,
-    ModifiedData,
+    SupervisionContext
 )
 import json
 from openai import OpenAI
@@ -20,8 +18,11 @@ import jinja2
 from asteroid_sdk.utils.utils import load_template
 from jsonschema import validate, ValidationError, SchemaError
 from pydantic import BaseModel
+import anthropic
+import os
 
-client = OpenAI()
+DEFAULT_OPENAI_LLM_MODEL = "gpt-4o-mini"
+DEFAULT_ANTHROPIC_LLM_MODEL = "claude-3-5-haiku-20241022"
 
 # DEFAULT PROMPTS
 LLM_SUPERVISOR_SYSTEM_PROMPT_TEMPLATE = load_template("default_llm_supervisor_system_template.jinja")
@@ -79,32 +80,38 @@ def preprocess_message(
 
 def llm_supervisor(
     instructions: str,
+    provider: str = "openai",
     supervisor_name: Optional[str] = None,
     description: Optional[str] = None,
-    openai_model: str = PREFERRED_LLM_MODEL,
+    model: str = DEFAULT_OPENAI_LLM_MODEL,
     system_prompt_template: str = LLM_SUPERVISOR_SYSTEM_PROMPT_TEMPLATE,
     assistant_prompt_template: str = LLM_SUPERVISOR_ASSISTANT_PROMPT_TEMPLATE,
     include_previous_messages: bool = True,
-    allow_modification: bool = False, #TODO: Move this somewhere else?
+    allow_modification: bool = False,
 ) -> Supervisor:
     """
     Create a supervisor function that uses an LLM to make a supervision decision.
-    Supports both OpenAI and Anthropic messages by preprocessing them into simple variables.
+    Supports both OpenAI and Anthropic models by preprocessing them into simple variables.
 
     Parameters:
     - instructions (str): The supervision instructions.
     - supervisor_name (Optional[str]): Optional name for the supervisor.
     - description (Optional[str]): Optional description.
-    - openai_model (str): OpenAI model to use.
-    - system_prompt_file (Optional[str]): Filename of the system prompt template in the prompts folder.
+    - model (str): LLM model to use.
+    - provider (str): LLM provider, 'openai' or 'anthropic'.
+    - system_prompt_template (str): Template for system prompt.
+    - assistant_prompt_template (str): Template for assistant prompt.
     - include_previous_messages (bool): Whether to include the previous messages to the LLM.
-    - prompt_template_file (Optional[str]): Filename of the prompt template in the prompts folder.
+    - allow_modification (bool): Whether to allow modification.
 
     Returns:
     - Supervisor: A callable supervisor function.
     """
+    
+    if provider == "anthropic" and model == DEFAULT_OPENAI_LLM_MODEL:
+        model = DEFAULT_ANTHROPIC_LLM_MODEL
 
-    # Compile the Jinja template
+    # Compile the Jinja templates
     compiled_system_prompt_template = jinja2.Template(system_prompt_template)
     compiled_assistant_prompt_template = jinja2.Template(assistant_prompt_template)
 
@@ -134,16 +141,20 @@ def llm_supervisor(
         # Preprocess the message to extract simple variables
         preprocessed = preprocess_message(message)
 
-        # Prepare the context for the prompt template
-        system_message_context = {
-            "instructions": instructions
-        }
+        # Prepare the context for the prompt templates
+        system_message_context = {"instructions": instructions}
         assistant_message_context = {
-            "previous_messages": supervision_context.messages_to_text() if supervision_context and include_previous_messages else "",
+            "previous_messages": (
+                supervision_context.messages_to_text()
+                if supervision_context and include_previous_messages
+                else ""
+            ),
             "previous_decision": {
                 "decision": previous_decision.decision,
-                "explanation": previous_decision.explanation
-            } if previous_decision else None,
+                "explanation": previous_decision.explanation,
+            }
+            if previous_decision
+            else None,
             "tool_call_name": preprocessed.get("tool_call_name"),
             "tool_call_description": preprocessed.get("tool_call_description"),
             "tool_call_arguments": preprocessed.get("tool_call_arguments"),
@@ -151,72 +162,147 @@ def llm_supervisor(
             "allow_modification": allow_modification,
         }
 
-        # Render the prompt using the template
+        # Render the prompts using the templates
         system_prompt = compiled_system_prompt_template.render(**system_message_context)
         assistant_prompt = compiled_assistant_prompt_template.render(**assistant_message_context)
 
-        # Prepare messages for the LLM
-        messages = [
-            {"role": "system", "content": system_prompt.strip()},
-            {"role": "assistant", "content": assistant_prompt.strip()}
-        ]
+        # Prepare messages and function/tool definitions based on the provider
+        if provider == "openai":
+            
+            openai_client = OpenAI()
+            
+            messages = [
+                {"role": "system", "content": system_prompt.strip()},
+                {"role": "user", "content": assistant_prompt.strip()},
+            ]
 
-        # Define the function schema for SupervisionDecision
-        supervision_decision_schema = SupervisionDecision.model_json_schema()
+            # Define the function schema for SupervisionDecision
+            supervision_decision_schema = SupervisionDecision.model_json_schema()
 
-        # Prepare the function definition for the OpenAI API
-        functions = [
-            {
-                "name": "supervision_decision",
-                "description": "Analyze the input based on the provided instructions and context, and make a supervision decision: APPROVE, REJECT, ESCALATE, TERMINATE, or MODIFY. Provide a concise and accurate explanation for your decision. If you modify the input, include the modified content in the 'modified' field.",
-                "parameters": supervision_decision_schema,
-            }
-        ]
+            functions = [
+                {
+                    "name": "supervision_decision",
+                    "description": (
+                        "Analyze the input based on the provided instructions and context, and make a "
+                        "supervision decision: APPROVE, REJECT, ESCALATE, TERMINATE, or MODIFY. Provide a "
+                        "concise and accurate explanation for your decision. If you modify the input, include "
+                        "the modified content in the 'modified' field."
+                    ),
+                    "parameters": supervision_decision_schema,
+                }
+            ]
 
-        try:
-            # OpenAI API call
-            completion = client.chat.completions.create(
-                model=openai_model,
-                messages=messages,
-                functions=functions,
-                function_call={"name": "supervision_decision"},
-            )
+            try:
+                # OpenAI API call
+                completion = openai_client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    functions=functions,
+                    function_call={"name": "supervision_decision"},
+                )
 
-            # Extract the function call arguments from the response
-            response_message = completion.choices[0].message
+                # Extract the function call arguments from the response
+                response_message = completion.choices[0].message
 
-            if response_message and response_message.function_call:
-                response_args = response_message.function_call.arguments
-                response_data = json.loads(response_args)
-            else:
-                raise ValueError("No valid function call in assistant's response.")
+                if response_message and response_message.function_call:
+                    response_args = response_message.function_call.arguments
+                    response_data = json.loads(response_args)
+                else:
+                    raise ValueError("No valid function call in assistant's response.")
 
-            # Parse the 'modified' field
-            modified_data = response_data.get("modified")
+                # Parse the 'modified' field
+                modified_data = response_data.get("modified")
 
-            decision = SupervisionDecision(
-                decision=response_data.get("decision"),
-                modified=modified_data,
-                explanation=response_data.get("explanation")
-            )
-            return decision
+                decision = SupervisionDecision(
+                    decision=response_data.get("decision").lower(),
+                    modified=modified_data,
+                    explanation=response_data.get("explanation"),
+                )
+                return decision
 
-        except Exception as e:
-            print(f"Error during LLM supervision: {str(e)}")
-            return SupervisionDecision(
-                decision=SupervisionDecisionType.ESCALATE,
-                explanation=f"Error during LLM supervision: {str(e)}",
-                modified=None
-            )
+            except Exception as e:
+                print(f"Error during LLM supervision: {str(e)}")
+                return SupervisionDecision(
+                    decision=SupervisionDecisionType.ESCALATE,
+                    explanation=f"Error during LLM supervision: {str(e)}",
+                    modified=None,
+                )
+
+        elif provider == "anthropic":
+            # Convert messages to the format expected by Anthropic
+            messages = [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": assistant_prompt.strip()}],
+                }
+            ]
+
+            # Define the tool schema for SupervisionDecision
+            supervision_decision_schema = SupervisionDecision.model_json_schema()
+
+            tools = [
+                {
+                    "name": "supervision_decision",
+                    "description": (
+                        "Analyze the input based on the provided instructions and context, and make a "
+                        "supervision decision: APPROVE, REJECT, ESCALATE, TERMINATE, or MODIFY. Provide a "
+                        "concise and accurate explanation for your decision. If you modify the input, include "
+                        "the modified content in the 'modified' field."
+                    ),
+                    "input_schema": supervision_decision_schema,
+                }
+            ]
+
+            tool_choice = {"type": "tool", "name": "supervision_decision"}
+
+            try:
+                # Initialize the AnthropIc client
+                anthropic_client = anthropic.Anthropic()
+
+                # Anthropic API call
+                completion = anthropic_client.messages.create(
+                    model=model,
+                    system=system_prompt,
+                    max_tokens=1024,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    messages=messages,
+                )
+
+                # Extract the tool output from the response
+                response_data = completion.content[0].input
+                # Parse the 'modified' field
+                modified_data = response_data.get("modified")
+
+                decision = SupervisionDecision(
+                    decision=response_data.get("decision").lower(),
+                    modified=modified_data,
+                    explanation=response_data.get("explanation"),
+                )
+                return decision
+
+            except Exception as e:
+                print(f"Error during LLM supervision: {str(e)}")
+                return SupervisionDecision(
+                    decision=SupervisionDecisionType.ESCALATE,
+                    explanation=f"Error during LLM supervision: {str(e)}",
+                    modified=None,
+                )
+
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
 
     supervisor_function.__name__ = supervisor_name if supervisor_name else "llm_supervisor"
     supervisor_function.__doc__ = description if description else "LLM-based supervisor."
 
     supervisor_function.supervisor_attributes = {
         "instructions": instructions,
-        "openai_model": openai_model,
+        "model": model,
+        "provider": provider,
         "system_prompt_template": system_prompt_template,
+        "assistant_prompt_template": assistant_prompt_template,
         "include_previous_messages": include_previous_messages,
+        "allow_modification": allow_modification,
     }
 
     return supervisor_function

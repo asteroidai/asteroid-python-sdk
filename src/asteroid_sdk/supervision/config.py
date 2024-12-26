@@ -14,7 +14,6 @@ from anthropic.types import Message, TextBlock, ToolUseBlock
 from pydantic import BaseModel, Field
 import logging
 
-PREFERRED_LLM_MODEL = "gpt-4o"
 DEFAULT_RUN_NAME = "default"
 
 class SupervisionDecisionType(str, Enum):
