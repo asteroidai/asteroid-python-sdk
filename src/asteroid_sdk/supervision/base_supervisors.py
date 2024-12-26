@@ -21,8 +21,8 @@ from pydantic import BaseModel
 import anthropic
 import os
 
-DEFAULT_OPENAI_LLM_MODEL = "gpt-4o-mini"
-DEFAULT_ANTHROPIC_LLM_MODEL = "claude-3-5-haiku-20241022"
+DEFAULT_OPENAI_LLM_MODEL = "gpt-4o"
+DEFAULT_ANTHROPIC_LLM_MODEL = "claude-3-5-sonnet-latest"
 
 # DEFAULT PROMPTS
 LLM_SUPERVISOR_SYSTEM_PROMPT_TEMPLATE = load_template("default_llm_supervisor_system_template.jinja")

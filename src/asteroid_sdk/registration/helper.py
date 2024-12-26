@@ -594,7 +594,7 @@ def send_supervision_result(
         else:
             raise Exception(f"Failed to submit supervision result. Response: {response}")
     except Exception as e:
-        print(f"Error submitting supervision result: {e}, Response: {response}")
+        print(f"Error submitting supervision result: {e}")
         raise
 
 
