@@ -5,6 +5,7 @@ Wrapper for the Anthropic client to intercept requests and responses.
 import asyncio
 from typing import Any, Callable, List, Optional
 from uuid import UUID
+import logging
 
 from anthropic import Anthropic, AnthropicError
 
@@ -33,11 +34,11 @@ class CompletionsWrapper:
         self.execution_mode = execution_mode
 
     def create(self, *args, message_supervisors: Optional[List[List[Callable]]] = None, **kwargs) -> Any:
-        # If parallel tool calls not set to false (or doesn't exist, defaulting to true), then raise an error.
+        # If parallel tool calls are not set to false, then raise an error.
         # Parallel tool calls do not work at the moment due to conflicts when trying to 'resample'
-        if kwargs.get("tool_choice", False) and kwargs["tool_choice"]["disable_parallel_tool_use"] == False:
-            raise ValueError(
-                "Parallel tool calls are not supported, Please turn them off by setting 'parallel_tool_calls=False' in your request.")
+        if kwargs.get("tool_choice", {}) and not kwargs["tool_choice"].get("disable_parallel_tool_use", False):
+            logging.warning("Parallel tool calls are not supported, setting disable_parallel_tool_use=True")
+            kwargs["tool_choice"]["disable_parallel_tool_use"] = True
 
         if self.execution_mode == ExecutionMode.MONITORING:
             # Run in async mode

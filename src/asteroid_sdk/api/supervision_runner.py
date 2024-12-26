@@ -185,7 +185,7 @@ class SupervisionRunner:
             # Approved
             return tool_call, supervisor_chain_decisions, False
         elif allow_message_modifications and final_supervisor_chain_decisions[-1].decision == SupervisionDecisionType.MODIFY:
-            # Modified
+            # Modified # TODO: Is this working? - Probably not
             return final_supervisor_chain_decisions[-1].modified.openai_tool_call, supervisor_chain_decisions, True
         else:
             # Rejected
@@ -326,7 +326,7 @@ class SupervisionRunner:
         )
 
         # Get the supervisor function from the context
-        supervisor_func = supervision_context.get_supervisor_by_id(supervisor.id)
+        supervisor_func = supervision_context.get_supervisor_func_by_id(supervisor.id)
         if not supervisor_func:
             print(f"No local supervisor function found for ID {supervisor.id}. Skipping.")
             return None
@@ -397,12 +397,8 @@ class SupervisionRunner:
             feedback_message = self._get_feedback_message(failed_all_decisions, failed_tool_call)
 
             updated_messages.append({
-                "role": "assistant",
-                "content": feedback_message
-            })
-            updated_messages.append({
                 "role": "user",
-                "content": resample_prompt_content
+                "content": feedback_message
             })
 
             resampled_request_kwargs = copy.deepcopy(request_kwargs)
@@ -420,7 +416,6 @@ class SupervisionRunner:
                     print("No tool calls found in resampled response, but we have message supervisors")
                     # Create fake message tool call
                     resampled_response, resampled_tool_calls = generate_fake_message_tool_call(
-                        client=self.client,
                         response=resampled_response,
                         supervision_context=supervision_context,
                         model_provider_helper=self.model_provider_helper

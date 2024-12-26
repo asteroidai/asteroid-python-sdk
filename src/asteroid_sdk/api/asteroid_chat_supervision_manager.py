@@ -144,11 +144,10 @@ class AsteroidChatSupervisionManager:
         if message_supervisors and not response_data_tool_calls:
             # Use the extracted function to generate fake tool calls
             modified_response, response_data_tool_calls = generate_fake_message_tool_call(
-                client=self.client,
                 response=response,
                 supervision_context=supervision_context,
+                model_provider_helper=self.model_provider_helper,
                 message_supervisors=message_supervisors,
-                model_provider_helper=self.model_provider_helper
             )
             print("No tool calls found in response, but message supervisors provided, executing message supervisors")
 
