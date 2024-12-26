@@ -1,48 +1,47 @@
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 from functools import wraps
 from uuid import UUID
 
-from .config import supervision_config
-from .config import SupervisionDecision, SupervisionContext
+from .config import SupervisionDecision, SupervisionContext, get_supervision_config
 from asteroid_sdk.supervision.protocols import Supervisor
 from openai.types.chat import ChatCompletionMessage
 from anthropic.types.message import Message 
 import functools
 
-
 def supervise(
     supervision_functions: Optional[List[List[Callable]]] = None,
-    ignored_attributes: Optional[List[str]] = None
+    ignored_attributes: Optional[List[str]] = None,    
 ):
     """
-    Decorator that supervises a function.
+    Decorator to supervise a tool.
+
+    Can be used in the following ways:
+    
+    - As a decorator for functions without tool and run_id:
+      @supervise(supervision_functions=..., ignored_attributes=...)
+      def my_tool(...): ...
 
     Args:
-        supervision_functions (Optional[List[List[Callable]]]): Supervision functions to use. Defaults to None.
-        ignored_attributes    (Optional[List[str]]): Ignored attributes. Defaults to None.
+        supervision_functions (Optional[List[List[Callable]]]): Supervision functions to use.
+        ignored_attributes    (Optional[List[str]]): Attributes to ignore in supervision.
+        
     """
-    if (
-        supervision_functions
-        and len(supervision_functions) == 1
-        and isinstance(supervision_functions[0], list)
-    ):
-        supervision_functions = [supervision_functions[0]]
-
+    supervision_config = get_supervision_config()
     def decorator(func):
-        # Register the supervised function in SupervisionConfig's pending functions
+        # Store in pending supervised functions for later registration
         supervision_config.register_pending_supervised_function(
-            func,
-            supervision_functions,
-            ignored_attributes
+            func=func,
+            supervision_functions=supervision_functions,
+            ignored_attributes=ignored_attributes,
         )
 
         @wraps(func)
         def wrapper(*args, **kwargs):
-            # Execute the function directly
-            # TODO: Log the function call
+            # TODO: Add logging here?
             return func(*args, **kwargs)
 
         return wrapper
+
     return decorator
 
 
