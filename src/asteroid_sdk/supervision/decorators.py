@@ -30,7 +30,7 @@ def supervise(
     def decorator(func):
         # Store in pending supervised functions for later registration
         supervision_config.register_pending_supervised_function(
-            func=func,
+            tool=func,
             supervision_functions=supervision_functions,
             ignored_attributes=ignored_attributes,
         )

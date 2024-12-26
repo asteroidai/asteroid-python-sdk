@@ -198,46 +198,55 @@ class SupervisionContext:
     # Methods to manage the supervised functions registry
     def add_supervised_function(
         self,
-        func: Callable,
+        function_name: str,
         supervision_functions: Optional[List[List[Callable]]] = None,
         ignored_attributes: Optional[List[str]] = None,
+        function: Optional[Callable | Dict[str, Any]] = None,
     ):
-        func_name = func.__qualname__
+        """
+        Registers a supervised function or tool in the context.
+
+        Args:
+            function_name (str): The name of the function/tool.
+            supervision_functions (Optional[List[List[Callable]]]): The supervision functions.
+            ignored_attributes (Optional[List[str]]): Attributes to ignore.
+            function (Optional[Callable]): The function object, if available.
+        """
         with self.lock:
-            if func_name in self.supervised_functions_registry:
-                print(f"Function '{func_name}' is already registered in context. Skipping.")
+            if function_name in self.supervised_functions_registry:
+                print(f"Function '{function_name}' is already registered in context. Skipping.")
                 return  # Skip adding the duplicate
 
-            self.supervised_functions_registry[func_name] = {
+            self.supervised_functions_registry[function_name] = {
                 'supervision_functions': supervision_functions or [],
                 'ignored_attributes': ignored_attributes or [],
-                'function': func,
+                'function': function,  # This will be None if function is not provided
             }
-            print(f"Registered function '{func_name}' in supervision context")
+            print(f"Registered function '{function_name}' in supervision context")
 
-    def get_supervised_function_entry(self, func_name: str) -> Optional[Dict[str, Any]]:
+    def update_tool_id(self, function_name: str, tool_id: UUID):
         with self.lock:
-            return self.supervised_functions_registry.get(func_name)
+            if function_name in self.supervised_functions_registry:
+                self.supervised_functions_registry[function_name]['tool_id'] = tool_id
+                print(f"Updated tool ID for '{function_name}' to {tool_id}")
+            else:
+                print(f"Function '{function_name}' not found in supervision context.")
 
-    def get_supervised_functions(self) -> List[Callable]:
+    def add_run_id_to_supervised_function(self, function_name: str, run_id: UUID):
+        with self.lock:
+            if function_name in self.supervised_functions_registry:
+                self.supervised_functions_registry[function_name]['run_id'] = run_id
+                print(f"Updated run ID for '{function_name}' to {run_id}")
+            else:
+                print(f"Function '{function_name}' not found in supervision context.")
+
+    def get_supervised_function_entry(self, function_name: str) -> Optional[Dict[str, Any]]:
+        with self.lock:
+            return self.supervised_functions_registry.get(function_name)
+
+    def get_supervised_functions(self) -> List[Dict[str, Any]]:
         with self.lock:
             return list(self.supervised_functions_registry.values())
-
-    def get_functions_only(self) -> List[Callable]:
-        with self.lock:
-            return [func for func in self.supervised_functions_registry.values() if func['supervision_functions'] is None]
-
-    def update_tool_id(self, func: Callable, tool_id: UUID):
-        with self.lock:
-            if func.__qualname__ in self.supervised_functions_registry:
-                self.supervised_functions_registry[func.__qualname__]['tool_id'] = tool_id
-                print(f"Updated tool ID for '{func.__qualname__}' to {tool_id}")
-
-    def add_run_id_to_supervised_function(self, func: Callable, run_id: UUID):
-        with self.lock:
-            if func.__qualname__ in self.supervised_functions_registry:
-                self.supervised_functions_registry[func.__qualname__]['run_id'] = run_id
-                print(f"Updated run ID for '{func.__qualname__}' to {run_id}")
 
     def add_supervisor_id(self, supervisor_name: str, supervisor_id: UUID):
         with self.lock:
@@ -262,18 +271,18 @@ class SupervisionContext:
             else:
                 self.openai_messages = final_messages
 
-    def add_local_supervisor(self, supervisor_id: UUID, supervisor_func: Callable, supervisor_name: str):
+    def add_local_supervisor(self, supervisor_id: UUID, supervisor_func: Callable):
         """Add a supervisor function to the config."""
         self.local_supervisors_by_id[supervisor_id] = supervisor_func
 
-    def get_supervisor_by_id(self, supervisor_id: UUID) -> Optional[Callable]:
+    def get_supervisor_func_by_id(self, supervisor_id: UUID) -> Optional[Callable]:
         """Retrieve a supervisor function by its ID."""
         return self.local_supervisors_by_id.get(supervisor_id)
     
-    def get_supervisor_id_by_func(self, supervisor_func: Callable) -> Optional[UUID]:
+    def get_supervisor_id_by_name(self, supervisor_name: str) -> Optional[UUID]:
         """Retrieve a supervisor function by its function."""
         for supervisor_id, func in self.local_supervisors_by_id.items():
-            if func == supervisor_func:
+            if func.__name__ == supervisor_name:
                 return supervisor_id
         return None
 
@@ -475,49 +484,44 @@ class SupervisionConfig:
             else:
                 raise ValueError(f"No run found with run_name '{run_name}'")
 
-    def add_supervised_function_to_all_runs(
-        self,
-        func: Callable,
-        supervision_functions: List[List[Callable]] = [],
-        ignored_attributes: List[str] = [],
-    ):
-        """
-        Add supervised functions to the supervision context of each run in the supervision configuration.
-        """
-        with self.lock:
-            for run in self.get_all_runs():
-                run.supervision_context.add_supervised_function(func, supervision_functions, ignored_attributes)
-                print(f"Added supervised function '{func.__qualname__}' to run '{run.run_name}'")
     # Method to register supervised functions temporarily
     def register_pending_supervised_function(
         self,
-        func: Callable,
+        tool: Callable | Dict[str, Any],
         supervision_functions: Optional[List[List[Callable]]] = None,
         ignored_attributes: Optional[List[str]] = None,
     ):
-        func_name = func.__qualname__
+        if isinstance(tool, dict):
+            tool_name = tool.get('name')
+        else:
+            tool_name = tool.__qualname__
+        if not tool_name:
+            raise ValueError("Tool name not found. Please provide a tool name.")
         with self.lock:
-            if func_name in self.pending_supervised_functions:
-                print(f"Function '{func_name}' is already pending registration. Skipping.")
+            if tool_name in self.pending_supervised_functions:
+                print(f"Function '{tool_name}' is already pending registration. Skipping.")
                 return  # Skip adding the duplicate
+            
+            if isinstance(tool, dict):
+                tool_description = str(tool.get('description'))
+                function = tool.get('function')
+            else:
+                tool_description = str(tool.__doc__) if tool.__doc__ else tool.__qualname__
+                function = tool
 
-            self.pending_supervised_functions[func_name] = {
+            self.pending_supervised_functions[tool_name] = {
                 'supervision_functions': supervision_functions or [],
                 'ignored_attributes': ignored_attributes or [],
-                'function': func,
+                'function': function,
+                'tool_description': tool_description,
             }
-            print(f"Registered pending supervised function '{func_name}'")
+            print(f"Registered pending supervised function '{tool_name}'")
 
     def get_pending_supervised_functions(self) -> Dict[str, Dict[str, Any]]:
         """Returns a deep copy of the pending supervised functions."""
         with self.lock:
             return copy.deepcopy(self.pending_supervised_functions)
 
-    # Optionally, clear the pending supervised functions if needed
-    def clear_pending_supervised_functions(self):
-        with self.lock:
-            self.pending_supervised_functions.clear()
-            print("Cleared pending supervised functions")
 
 def get_supervision_context(run_id: UUID, project_name: Optional[str] = None, task_name: Optional[str] = None, run_name: Optional[str] = None) -> SupervisionContext:
     if project_name and task_name and run_name:
