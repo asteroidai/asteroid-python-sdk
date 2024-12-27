@@ -1,7 +1,7 @@
 from typing import Any
 
 from asteroid_sdk.supervision import SupervisionDecision, SupervisionDecisionType
-from asteroid_sdk.supervision.supervisors import tool_supervisor_decorator
+from asteroid_sdk.supervision.base_supervisors import tool_supervisor_decorator
 
 
 @tool_supervisor_decorator(strategy="reject") #TODO: Rethink the decorator design, it can't be configured with parameters in this way

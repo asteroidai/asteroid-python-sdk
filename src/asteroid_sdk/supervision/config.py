@@ -10,11 +10,10 @@ from inspect_ai.model import ChatMessage, ChatMessageAssistant
 from inspect_ai.solver import TaskState
 from inspect_ai.tool import ToolCall
 from openai.types.chat.chat_completion_message import ChatCompletionMessageToolCall
+from anthropic.types import Message, TextBlock, ToolUseBlock
 from pydantic import BaseModel, Field
+import logging
 
-from asteroid_sdk.mocking.policies import MockPolicy
-
-PREFERRED_LLM_MODEL = "gpt-4o"
 DEFAULT_RUN_NAME = "default"
 
 class SupervisionDecisionType(str, Enum):
@@ -33,6 +32,8 @@ class RejectionPolicy(str, Enum):
 
 class MultiSupervisorResolution(str, Enum):
     ALL_MUST_APPROVE = "all_must_approve"
+    #TODO: We will support more complex resolution strategies in the future
+    
 
 
 class ModifiedData(BaseModel):
@@ -64,7 +65,6 @@ class SupervisionContext:
     Context for supervision decisions. This is used to store the context of the currently active project including all tasks/runs.
     """
     def __init__(self, pending_functions: Optional[Dict[str, Dict[str, Any]]] = None):
-        self.langchain_events: List[dict] = []  # List to store all logged events
         self.lock = Lock()  # Ensure thread safety
         self.metadata: Dict[str, Any] = {}
         self.inspect_ai_state: Optional[TaskState] = None
@@ -74,42 +74,75 @@ class SupervisionContext:
         self.registered_supervisors: Dict[str, UUID] = {}
         self.local_supervisors_by_id: Dict[UUID, Callable] = {}
 
-    def add_event(self, event: dict):
-        with self.lock:
-            self.langchain_events.append(event)
-
     def add_metadata(self, key: str, value: Any):
         self.metadata[key] = value
 
-    def to_text(self) -> str:
+    def messages_to_text(self) -> str:
         """Converts the supervision context into a textual description."""
-        texts = []
+        
         with self.lock:
-            # Process LangChain events if any
-            if self.langchain_events:
-                texts.append("## LangChain Events:")
-                for event in self.langchain_events:
-                    event_description = self._describe_event(event)
-                    texts.append(event_description)
-
             # Process inspect_ai_state if it exists
             if self.inspect_ai_state:
-                inspect_ai_text = self._describe_inspect_ai_state()
-                texts.append(inspect_ai_text)
-
+                return self._describe_inspect_ai_state()
             # Process OpenAI messages if any
             if self.openai_messages:
-                openai_text = self._describe_openai_messages()
-                texts.append(openai_text)
+                return self._describe_openai_messages()
+            elif self.anthropic_messages:
+                return self._describe_anthropic_messages()
+            
+        logging.warning("No messages to convert to text")
+        return ""
 
-        return "\n\n".join(texts)
+    def _describe_openai_messages(self) -> str:
+        """Converts the openai_messages into a textual description."""
+        messages_text = []
+        for message in self.openai_messages:
+            role = message.get('role', 'Unknown').capitalize()
+            content = message.get('content', '').strip()
+            message_str = f"**{role}:**\n{content}" if content else f"**{role}:**"
 
-    def _describe_event(self, event: dict) -> str:
-        """Converts a single event into a textual description."""
-        event_type = event.get("event", "Unknown Event")
-        data = event.get("data", {})
-        description = f"### Event: {event_type}\nData:\n```json\n{json.dumps(data, indent=2)}\n```"
-        return description
+            # Handle tool calls if present
+            tool_calls = message.get('tool_calls', [])
+            if tool_calls:
+                for tool_call in tool_calls:
+                    function = tool_call.get('function', {})
+                    function_name = function.get('name', 'Unknown Function')
+                    arguments = function.get('arguments', '{}').strip()
+                    message_str += f"\n\n**Function Call:** `{function_name}`\n**Arguments:** {arguments}"
+
+            messages_text.append(message_str)
+        return "\n\n".join(messages_text)
+    
+    
+    def _describe_anthropic_messages(self) -> str:
+        """Converts the anthropic_messages into a textual description, including tool calls."""
+        messages_text = []
+        for message in self.anthropic_messages:
+            role = message.get('role', 'Unknown').capitalize()
+            contents = message.get('content', [])
+                        
+            message_str = f"**{role}:**"
+            
+            if isinstance(contents, str):
+                message_str += f"\n{contents}"
+            else:
+                for content_block in contents:
+                    if isinstance(content_block, str):
+                        message_str += f"\n{content_block}"
+                    elif isinstance(content_block, TextBlock):
+                        text = content_block.text.strip()
+                        if text:
+                            message_str += f"\n{text}"
+                    elif isinstance(content_block, ToolUseBlock):
+                        tool_name = content_block.name
+                        tool_args = content_block.input
+                        message_str += f"\n\n**Tool Use:** `{tool_name}`\n**Arguments:** {json.dumps(tool_args, indent=2)}"
+                    else:
+                        message_str += f"\n\n**Unknown Content Block Type:** {type(content_block)}"
+            
+            messages_text.append(message_str)
+        
+        return "\n\n".join(messages_text)
 
     def _describe_inspect_ai_state(self) -> str:
         """Converts the inspect_ai_state into a textual description."""
@@ -126,7 +159,7 @@ class SupervisionContext:
         # Include messages
         texts.append("### Messages:")
         for message in state.messages:
-            message_text = self._describe_chat_message(message)
+            message_text = self._describe_inspect_ai_chat_message(message)
             texts.append(message_text)
 
         # Include output if available
@@ -136,7 +169,7 @@ class SupervisionContext:
 
         return "\n\n".join(texts)
 
-    def _describe_chat_message(self, message: ChatMessage) -> str:
+    def _describe_inspect_ai_chat_message(self, message: ChatMessage) -> str:
         """Converts a chat message into a textual description."""
         role = message.role.capitalize()
         text_content = message.text.strip()
@@ -145,12 +178,12 @@ class SupervisionContext:
         if isinstance(message, ChatMessageAssistant) and message.tool_calls:
             text += "\n\n**Tool Calls:**"
             for tool_call in message.tool_calls:
-                tool_call_description = self._describe_tool_call(tool_call)
+                tool_call_description = self._describe_inspect_ai_tool_call(tool_call)
                 text += f"\n{tool_call_description}"
 
         return text
 
-    def _describe_tool_call(self, tool_call: ToolCall) -> str:
+    def _describe_inspect_ai_tool_call(self, tool_call: ToolCall) -> str:
         """Converts a ToolCall into a textual description."""
         description = (
             f"- **Tool Call ID:** {tool_call.id}\n"
@@ -164,46 +197,55 @@ class SupervisionContext:
     # Methods to manage the supervised functions registry
     def add_supervised_function(
         self,
-        func: Callable,
+        function_name: str,
         supervision_functions: Optional[List[List[Callable]]] = None,
         ignored_attributes: Optional[List[str]] = None,
+        function: Optional[Callable | Dict[str, Any]] = None,
     ):
-        func_name = func.__qualname__
+        """
+        Registers a supervised function or tool in the context.
+
+        Args:
+            function_name (str): The name of the function/tool.
+            supervision_functions (Optional[List[List[Callable]]]): The supervision functions.
+            ignored_attributes (Optional[List[str]]): Attributes to ignore.
+            function (Optional[Callable]): The function object, if available.
+        """
         with self.lock:
-            if func_name in self.supervised_functions_registry:
-                print(f"Function '{func_name}' is already registered in context. Skipping.")
+            if function_name in self.supervised_functions_registry:
+                print(f"Function '{function_name}' is already registered in context. Skipping.")
                 return  # Skip adding the duplicate
 
-            self.supervised_functions_registry[func_name] = {
+            self.supervised_functions_registry[function_name] = {
                 'supervision_functions': supervision_functions or [],
                 'ignored_attributes': ignored_attributes or [],
-                'function': func,
+                'function': function,  # This will be None if function is not provided
             }
-            print(f"Registered function '{func_name}' in supervision context")
+            print(f"Registered function '{function_name}' in supervision context")
 
-    def get_supervised_function_entry(self, func_name: str) -> Optional[Dict[str, Any]]:
+    def update_tool_id(self, function_name: str, tool_id: UUID):
         with self.lock:
-            return self.supervised_functions_registry.get(func_name)
+            if function_name in self.supervised_functions_registry:
+                self.supervised_functions_registry[function_name]['tool_id'] = tool_id
+                print(f"Updated tool ID for '{function_name}' to {tool_id}")
+            else:
+                print(f"Function '{function_name}' not found in supervision context.")
 
-    def get_supervised_functions(self) -> List[Callable]:
+    def add_run_id_to_supervised_function(self, function_name: str, run_id: UUID):
+        with self.lock:
+            if function_name in self.supervised_functions_registry:
+                self.supervised_functions_registry[function_name]['run_id'] = run_id
+                print(f"Updated run ID for '{function_name}' to {run_id}")
+            else:
+                print(f"Function '{function_name}' not found in supervision context.")
+
+    def get_supervised_function_entry(self, function_name: str) -> Optional[Dict[str, Any]]:
+        with self.lock:
+            return self.supervised_functions_registry.get(function_name)
+
+    def get_supervised_functions(self) -> List[Dict[str, Any]]:
         with self.lock:
             return list(self.supervised_functions_registry.values())
-
-    def get_functions_only(self) -> List[Callable]:
-        with self.lock:
-            return [func for func in self.supervised_functions_registry.values() if func['supervision_functions'] is None]
-
-    def update_tool_id(self, func: Callable, tool_id: UUID):
-        with self.lock:
-            if func.__qualname__ in self.supervised_functions_registry:
-                self.supervised_functions_registry[func.__qualname__]['tool_id'] = tool_id
-                print(f"Updated tool ID for '{func.__qualname__}' to {tool_id}")
-
-    def add_run_id_to_supervised_function(self, func: Callable, run_id: UUID):
-        with self.lock:
-            if func.__qualname__ in self.supervised_functions_registry:
-                self.supervised_functions_registry[func.__qualname__]['run_id'] = run_id
-                print(f"Updated run ID for '{func.__qualname__}' to {run_id}")
 
     def add_supervisor_id(self, supervisor_name: str, supervisor_id: UUID):
         with self.lock:
@@ -214,26 +256,32 @@ class SupervisionContext:
         with self.lock:
             return self.registered_supervisors.get(supervisor_name)
 
-    def update_messages(self, messages: List[Dict[str, Any]], anthropic: bool = False):
+    def update_messages(self, messages: List[Dict[str, Any]], anthropic: bool = False, system_message: Optional[str] = None):
         """Updates the context with a list of OpenAI messages."""
+        if system_message:
+            # Anthropic stores the system message outside of the messages list
+            final_messages = [{"role": "system", "content": system_message}] + messages.copy()
+        else:
+            final_messages = messages.copy()
+        
         with self.lock:
             if anthropic:
-                self.anthropic_messages = messages.copy()
+                self.anthropic_messages = final_messages
             else:
-                self.openai_messages = messages.copy()
+                self.openai_messages = final_messages
 
-    def add_local_supervisor(self, supervisor_id: UUID, supervisor_func: Callable, supervisor_name: str):
+    def add_local_supervisor(self, supervisor_id: UUID, supervisor_func: Callable):
         """Add a supervisor function to the config."""
         self.local_supervisors_by_id[supervisor_id] = supervisor_func
 
-    def get_supervisor_by_id(self, supervisor_id: UUID) -> Optional[Callable]:
+    def get_supervisor_func_by_id(self, supervisor_id: UUID) -> Optional[Callable]:
         """Retrieve a supervisor function by its ID."""
         return self.local_supervisors_by_id.get(supervisor_id)
     
-    def get_supervisor_id_by_func(self, supervisor_func: Callable) -> Optional[UUID]:
+    def get_supervisor_id_by_name(self, supervisor_name: str) -> Optional[UUID]:
         """Retrieve a supervisor function by its function."""
         for supervisor_id, func in self.local_supervisors_by_id.items():
-            if func == supervisor_func:
+            if func.__name__ == supervisor_name:
                 return supervisor_id
         return None
 
@@ -259,10 +307,7 @@ class Project(BaseModel):
 class SupervisionConfig:
     def __init__(self):
         self.global_supervision_functions: List[Callable] = []
-        self.global_mock_policy = MockPolicy.NO_MOCK
         self.override_local_policy = False
-        self.mock_responses: Dict[str, List[Any]] = {}
-        self.previous_calls: Dict[str, List[Any]] = {}
         self.llm = None
         self.client = None  # Sentinel API client
         self.execution_settings: Dict[str, Any] = {}
@@ -282,42 +327,8 @@ class SupervisionConfig:
     def set_llm(self, llm):
         self.llm = llm
 
-    def set_mock_policy(self, mock_policy: MockPolicy):
-        self.global_mock_policy = mock_policy
-
     def set_execution_settings(self, execution_settings: Dict[str, Any]):
         self.execution_settings = execution_settings
-
-    def load_previous_execution_log(self, log_file_path: str, log_format='langchain'):
-        """Load and process a previous execution log."""
-        with open(log_file_path, 'r') as f:
-            log_data = f.readlines()
-
-        if log_format == 'langchain':
-            for line in log_data:
-                try:
-                    entry = json.loads(line)
-                    if entry['event'] == 'on_tool_end':
-                        function_name = entry['data']['kwargs'].get('name')
-                        output = entry['data']['output']
-                        if function_name:
-                            if function_name not in self.previous_calls:
-                                self.previous_calls[function_name] = []
-                            self.previous_calls[function_name].append(output)
-                except json.JSONDecodeError:
-                    continue  # Skip lines that are not valid JSON
-        else:
-            raise ValueError(f"Unsupported log format: {log_format}")
-
-        # Update mock_responses with examples from previous calls
-        self.mock_responses = self.previous_calls.copy()
-
-    def get_mock_response(self, function_name: str) -> Any:
-        """Get a mock response for a specific function."""
-        if function_name in self.mock_responses:
-            return random.choice(self.mock_responses[function_name])
-        else:
-            raise ValueError(f"No mock responses available for function: {function_name}")
 
     # Project methods
     def add_project(self, project_name: str, project_id: UUID):
@@ -472,49 +483,44 @@ class SupervisionConfig:
             else:
                 raise ValueError(f"No run found with run_name '{run_name}'")
 
-    def add_supervised_function_to_all_runs(
-        self,
-        func: Callable,
-        supervision_functions: List[List[Callable]] = [],
-        ignored_attributes: List[str] = [],
-    ):
-        """
-        Add supervised functions to the supervision context of each run in the supervision configuration.
-        """
-        with self.lock:
-            for run in self.get_all_runs():
-                run.supervision_context.add_supervised_function(func, supervision_functions, ignored_attributes)
-                print(f"Added supervised function '{func.__qualname__}' to run '{run.run_name}'")
     # Method to register supervised functions temporarily
     def register_pending_supervised_function(
         self,
-        func: Callable,
+        tool: Callable | Dict[str, Any],
         supervision_functions: Optional[List[List[Callable]]] = None,
         ignored_attributes: Optional[List[str]] = None,
     ):
-        func_name = func.__qualname__
+        if isinstance(tool, dict):
+            tool_name = tool.get('name')
+        else:
+            tool_name = tool.__qualname__
+        if not tool_name:
+            raise ValueError("Tool name not found. Please provide a tool name.")
         with self.lock:
-            if func_name in self.pending_supervised_functions:
-                print(f"Function '{func_name}' is already pending registration. Skipping.")
+            if tool_name in self.pending_supervised_functions:
+                print(f"Function '{tool_name}' is already pending registration. Skipping.")
                 return  # Skip adding the duplicate
+            
+            if isinstance(tool, dict):
+                tool_description = str(tool.get('description'))
+                function = tool.get('function')
+            else:
+                tool_description = str(tool.__doc__) if tool.__doc__ else tool.__qualname__
+                function = tool
 
-            self.pending_supervised_functions[func_name] = {
+            self.pending_supervised_functions[tool_name] = {
                 'supervision_functions': supervision_functions or [],
                 'ignored_attributes': ignored_attributes or [],
-                'function': func,
+                'function': function,
+                'tool_description': tool_description,
             }
-            print(f"Registered pending supervised function '{func_name}'")
+            print(f"Registered pending supervised function '{tool_name}'")
 
     def get_pending_supervised_functions(self) -> Dict[str, Dict[str, Any]]:
         """Returns a deep copy of the pending supervised functions."""
         with self.lock:
             return copy.deepcopy(self.pending_supervised_functions)
 
-    # Optionally, clear the pending supervised functions if needed
-    def clear_pending_supervised_functions(self):
-        with self.lock:
-            self.pending_supervised_functions.clear()
-            print("Cleared pending supervised functions")
 
 def get_supervision_context(run_id: UUID, project_name: Optional[str] = None, task_name: Optional[str] = None, run_name: Optional[str] = None) -> SupervisionContext:
     if project_name and task_name and run_name:
@@ -528,15 +534,6 @@ def get_supervision_context(run_id: UUID, project_name: Optional[str] = None, ta
 
 def set_global_supervision_functions(functions: List[Callable]):
     supervision_config.set_global_supervision_functions(functions)
-
-def set_global_mock_policy(mock_policy: MockPolicy, override_local_policy: bool = False):
-    supervision_config.set_mock_policy(mock_policy)
-    supervision_config.override_local_policy = override_local_policy
-
-def setup_sample_from_previous_calls(log_file_path: str):
-    """Set up the SAMPLE_FROM_PREVIOUS_CALLS mock policy."""
-    supervision_config.load_previous_execution_log(log_file_path)
-    set_global_mock_policy(MockPolicy.SAMPLE_PREVIOUS_CALLS, override_local_policy=True)
 
 # Global instance of SupervisionConfig
 supervision_config = SupervisionConfig()
