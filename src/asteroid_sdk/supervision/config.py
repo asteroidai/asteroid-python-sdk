@@ -5,9 +5,6 @@ from enum import Enum
 from threading import Lock
 from typing import Any, Callable, Dict, List, Optional
 from uuid import UUID
-
-from inspect_ai.model import ChatMessage, ChatMessageAssistant
-from inspect_ai.solver import TaskState
 from inspect_ai.tool import ToolCall
 from openai.types.chat.chat_completion_message import ChatCompletionMessageToolCall
 from anthropic.types import Message, TextBlock, ToolUseBlock
@@ -67,7 +64,6 @@ class SupervisionContext:
     def __init__(self, pending_functions: Optional[Dict[str, Dict[str, Any]]] = None):
         self.lock = Lock()  # Ensure thread safety
         self.metadata: Dict[str, Any] = {}
-        self.inspect_ai_state: Optional[TaskState] = None
         self.openai_messages: List[Dict[str, Any]] = []
         self.anthropic_messages: List[Dict[str, Any]] = []
         self.supervised_functions_registry: Dict[str, Dict[str, Any]] = pending_functions or {}
@@ -81,9 +77,6 @@ class SupervisionContext:
         """Converts the supervision context into a textual description."""
         
         with self.lock:
-            # Process inspect_ai_state if it exists
-            if self.inspect_ai_state:
-                return self._describe_inspect_ai_state()
             # Process OpenAI messages if any
             if self.openai_messages:
                 return self._describe_openai_messages()
@@ -143,55 +136,6 @@ class SupervisionContext:
             messages_text.append(message_str)
         
         return "\n\n".join(messages_text)
-
-    def _describe_inspect_ai_state(self) -> str:
-        """Converts the inspect_ai_state into a textual description."""
-        state = self.inspect_ai_state
-        texts = []
-
-        if state is None:
-            return ""
-
-        # Include meta information
-        meta_info = f"## Inspect AI State:\n**Model:** {state.model}\n**Sample ID:** {state.sample_id}\n**Epoch:** {state.epoch}"
-        texts.append(meta_info)
-
-        # Include messages
-        texts.append("### Messages:")
-        for message in state.messages:
-            message_text = self._describe_inspect_ai_chat_message(message)
-            texts.append(message_text)
-
-        # Include output if available
-        if state.output:
-            texts.append("### Output:")
-            texts.append(f"```json\n{json.dumps(state.output.dict(), indent=2)}\n```")
-
-        return "\n\n".join(texts)
-
-    def _describe_inspect_ai_chat_message(self, message: ChatMessage) -> str:
-        """Converts a chat message into a textual description."""
-        role = message.role.capitalize()
-        text_content = message.text.strip()
-        text = f"**{role}:**\n{text_content}"
-
-        if isinstance(message, ChatMessageAssistant) and message.tool_calls:
-            text += "\n\n**Tool Calls:**"
-            for tool_call in message.tool_calls:
-                tool_call_description = self._describe_inspect_ai_tool_call(tool_call)
-                text += f"\n{tool_call_description}"
-
-        return text
-
-    def _describe_inspect_ai_tool_call(self, tool_call: ToolCall) -> str:
-        """Converts a ToolCall into a textual description."""
-        description = (
-            f"- **Tool Call ID:** {tool_call.id}\n"
-            f"  - **Function:** {tool_call.function}\n"
-            f"  - **Arguments:** `{json.dumps(tool_call.arguments, indent=2)}`\n"
-            f"  - **Type:** {tool_call.type}"
-        )
-        return description
 
 
     # Methods to manage the supervised functions registry
