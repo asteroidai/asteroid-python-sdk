@@ -80,12 +80,12 @@ def preprocess_message(
 
 def llm_supervisor(
     instructions: str,
-    provider: str = "openai",
+    provider: Optional[str] = "openai",
     supervisor_name: Optional[str] = None,
     description: Optional[str] = None,
-    model: str = DEFAULT_OPENAI_LLM_MODEL,
-    system_prompt_template: str = LLM_SUPERVISOR_SYSTEM_PROMPT_TEMPLATE,
-    assistant_prompt_template: str = LLM_SUPERVISOR_ASSISTANT_PROMPT_TEMPLATE,
+    model: Optional[str] = DEFAULT_OPENAI_LLM_MODEL,
+    system_prompt_template: Optional[str] = LLM_SUPERVISOR_SYSTEM_PROMPT_TEMPLATE,
+    assistant_prompt_template: Optional[str] = LLM_SUPERVISOR_ASSISTANT_PROMPT_TEMPLATE,
     include_previous_messages: bool = True,
     allow_modification: bool = False,
 ) -> Supervisor:
@@ -107,9 +107,18 @@ def llm_supervisor(
     Returns:
     - Supervisor: A callable supervisor function.
     """
-    
+    if not provider:
+        provider = "openai"
+    if not model:
+        model = DEFAULT_OPENAI_LLM_MODEL
     if provider == "anthropic" and model == DEFAULT_OPENAI_LLM_MODEL:
         model = DEFAULT_ANTHROPIC_LLM_MODEL
+    if not system_prompt_template:
+        system_prompt_template = LLM_SUPERVISOR_SYSTEM_PROMPT_TEMPLATE
+    if not assistant_prompt_template:
+        assistant_prompt_template = LLM_SUPERVISOR_ASSISTANT_PROMPT_TEMPLATE
+        
+        
 
     # Compile the Jinja templates
     compiled_system_prompt_template = jinja2.Template(system_prompt_template)
@@ -317,7 +326,7 @@ def human_supervisor(
 
     Args:
         timeout (int): Timeout in seconds for waiting for the human decision.
-        n (int): Number of approvals required.
+        n (int): Number of samples to do.
 
     Returns:
         Supervisor: A supervisor function that implements human supervision.
