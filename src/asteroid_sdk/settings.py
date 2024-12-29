@@ -22,7 +22,5 @@ class Settings:
             raise ValueError("ASTEROID_API_KEY environment variable is required")
         if not self.api_url:
             raise ValueError("ASTEROID_API_URL environment variable is required")
-        if not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
 
 settings = Settings()
