@@ -1,17 +1,31 @@
-from typing import Any
+import json
+
+from anthropic.types import Message, ToolUseBlock
+from openai.types.chat import ChatCompletionMessage
 
 from asteroid_sdk.supervision import SupervisionDecision, SupervisionDecisionType
-from asteroid_sdk.supervision.model.tool_call import ToolCall
-from asteroid_sdk.supervision.base_supervisors import tool_supervisor_decorator
+from asteroid_sdk.supervision.decorators import supervisor
+from asteroid_sdk.supervision.helpers.model_provider_helper import AvailableProviderMessageTypes
 
 
-@tool_supervisor_decorator()
+def should_allow(message: AvailableProviderMessageTypes) -> bool:
+    if isinstance(message, ChatCompletionMessage):
+        args_string = message.tool_calls[0].function.arguments
+        return json.loads(args_string)["allow"]
+    elif isinstance(message, Message):
+        for content_block in message.content:
+            if type(content_block) == ToolUseBlock:
+                return content_block.input.get("allow", False)
+
+    raise ValueError("Message type not supported")
+
+
+@supervisor
 def depends_on_tool_call_supervisor(
-        tool_call: ToolCall,
-        config_kwargs: dict[str, Any],
+        message: AvailableProviderMessageTypes,
         **kwargs
 ) -> SupervisionDecision:
-    if tool_call.tool_params.get('allow'):
+    if should_allow(message):
         return SupervisionDecision(decision=SupervisionDecisionType.APPROVE)
     else:
         return SupervisionDecision(decision=SupervisionDecisionType.REJECT)
