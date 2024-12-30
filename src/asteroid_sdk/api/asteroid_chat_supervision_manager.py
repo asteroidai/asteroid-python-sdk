@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Optional, Callable
 from uuid import UUID
+import asyncio
 
 from anthropic.types import Message
 from openai.types.chat.chat_completion import ChatCompletion
@@ -106,7 +107,7 @@ class AsteroidChatSupervisionManager:
         choice_ids = create_new_chat_response.choice_ids
 
         # Extract execution settings from the supervision configuration
-        new_response = self.supervision_runner.handle_tool_calls_from_llm_response(
+        new_response = asyncio.run(self.supervision_runner.handle_tool_calls_from_llm_response(
             args=args,
             choice_ids=choice_ids,
             completions=completions,
@@ -117,7 +118,8 @@ class AsteroidChatSupervisionManager:
             run_id=run_id,
             supervision_context=supervision_context,
             message_supervisors=message_supervisors
-        )
+        ))
+                                   
         # We need to check if the the new response is our fake message tool call and change it to a normal message
         new_response = self.model_provider_helper.generate_message_from_fake_tool_call(new_response)
 

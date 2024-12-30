@@ -494,10 +494,12 @@ def register_supervisor(supervisor_name: str,
     else:
         raise Exception(f"Failed to register supervisor '{supervisor_name}'. Response: {supervisor_response}")
 
-def get_supervisor_chains_for_tool(tool_id: UUID, client: Client) -> List[SupervisorChain]:
+def get_supervisor_chains_for_tool(tool_id: UUID) -> List[SupervisorChain]:
     """
     Retrieve the supervisor chains for a specific tool.
     """
+
+    client = APIClientFactory.get_client()
 
     supervisors_list: List[SupervisorChain] = []
     try:

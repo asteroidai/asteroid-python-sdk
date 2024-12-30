@@ -11,6 +11,8 @@ from asteroid_sdk.api.generated.asteroid_api_client.api.tool import get_tool
 from asteroid_sdk.api.generated.asteroid_api_client.models import ChoiceIds
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor_type import SupervisorType
 from asteroid_sdk.api.generated.asteroid_api_client.models.tool import Tool
+from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor import Supervisor
+from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor_chain import SupervisorChain
 from asteroid_sdk.registration.helper import (
     get_supervisor_chains_for_tool,
     send_supervision_request,
@@ -44,7 +46,7 @@ class SupervisionRunner:
         self.api_logger = api_logger
         self.model_provider_helper = model_provider_helper
 
-    def handle_tool_calls_from_llm_response(
+    async def handle_tool_calls_from_llm_response(
             self,
             args: Any,
             choice_ids: List[ChoiceIds],
@@ -71,7 +73,7 @@ class SupervisionRunner:
             tool_call_id = UUID(choice_ids[0].tool_call_ids[idx].tool_call_id)
 
             # Process the tool call with supervision
-            processed_tool_call, all_decisions, modified = self.process_tool_call(
+            processed_tool_call, all_decisions, modified = await self.process_tool_call(
                 tool_call=tool_call,
                 tool_id=tool_id,
                 tool_call_id=tool_call_id,
@@ -90,7 +92,7 @@ class SupervisionRunner:
 
             if modified and processed_tool_call:
                 # If the tool call was modified, run the supervision process again without modifications allowed
-                final_tool_call, all_decisions, modified = self.process_tool_call(
+                final_tool_call, all_decisions, modified = await self.process_tool_call(
                     tool_call=processed_tool_call,
                     tool_id=tool_id,
                     tool_call_id=tool_call_id,
@@ -107,7 +109,7 @@ class SupervisionRunner:
                 # If the tool call was rejected, handle based on the rejection policy
                 if rejection_policy == RejectionPolicy.RESAMPLE_WITH_FEEDBACK:
                     # Attempt to resample the response with feedback
-                    resampled_response = self.handle_rejection_with_resampling(
+                    resampled_response = await self.handle_rejection_with_resampling(
                         failed_tool_call=tool_call,
                         failed_all_decisions=all_decisions,
                         completions=completions,
@@ -131,7 +133,7 @@ class SupervisionRunner:
     def resampled_response_successful(self, resampled_response):
         return resampled_response and resampled_response.tool_calls
 
-    def process_tool_call(
+    async def process_tool_call(
             self,
             tool_call: ToolCall,
             tool_id: UUID,
@@ -154,7 +156,7 @@ class SupervisionRunner:
         """
 
         # Get the supervisors chains for the tool
-        supervisors_chains = get_supervisor_chains_for_tool(tool_id, self.client)
+        supervisors_chains = get_supervisor_chains_for_tool(tool_id)
 
         # Retrieve the tool object
         tool = self.get_tool(tool_id)
@@ -166,7 +168,7 @@ class SupervisionRunner:
             return tool_call, None, False
 
         # Run all supervisors in the chains
-        supervisor_chain_decisions = self.run_supervisor_chains(
+        supervisor_chain_decisions = await self.run_supervisor_chains(
             supervisors_chains=supervisors_chains,
             tool=tool,
             tool_call=tool_call,
@@ -205,7 +207,7 @@ class SupervisionRunner:
         print(f"Failed to get tool for ID {tool_id}. Skipping.")
         return None
 
-    def run_supervisor_chains(
+    async def run_supervisor_chains(
             self,
             supervisors_chains: Any,
             tool: Tool,
@@ -228,7 +230,7 @@ class SupervisionRunner:
         """
         all_decisions = []
         for supervisor_chain in supervisors_chains:
-            chain_decisions = self.run_supervisors_in_chain(
+            chain_decisions = await self.run_supervisors_in_chain(
                 supervisor_chain=supervisor_chain,
                 tool=tool,
                 tool_call=tool_call,
@@ -251,9 +253,9 @@ class SupervisionRunner:
                 break
         return all_decisions
 
-    def run_supervisors_in_chain(
+    async def run_supervisors_in_chain(
             self,
-            supervisor_chain: Any,
+            supervisor_chain: SupervisorChain,
             tool: Tool,
             tool_call: ToolCall,
             tool_call_id: UUID,
@@ -274,7 +276,7 @@ class SupervisionRunner:
         """
         chain_decisions = []
         for position_in_chain, supervisor in enumerate(supervisor_chain.supervisors):
-            decision = self.execute_supervisor(
+            decision = await self.execute_supervisor(
                 supervisor=supervisor,
                 tool=tool,
                 tool_call=tool_call,
@@ -293,7 +295,7 @@ class SupervisionRunner:
                 break
         return chain_decisions
 
-    def execute_supervisor(
+    async def execute_supervisor(
             self,
             supervisor: Any,
             tool: Tool,
@@ -302,7 +304,8 @@ class SupervisionRunner:
             position_in_chain: int,
             supervision_context: Any,
             supervisor_chain_id: UUID,
-            execution_mode: str
+            execution_mode: str,
+            supervisor_func: Optional[Callable] = None
     ) -> Optional[SupervisionDecision]:
         """
         Execute a single supervisor and return its decision.
@@ -325,19 +328,19 @@ class SupervisionRunner:
             position_in_chain=position_in_chain
         )
 
-        # Get the supervisor function from the context
-        supervisor_func = supervision_context.get_supervisor_func_by_id(supervisor.id)
         if not supervisor_func:
-            print(f"No local supervisor function found for ID {supervisor.id}. Skipping.")
-            return None
-
+            # Get the supervisor function from the context
+            supervisor_func = supervision_context.get_supervisor_func_by_id(supervisor.id)
+            if not supervisor_func:
+                print(f"No local supervisor function found for ID {supervisor.id}. Skipping.")
+                return None
 
         if supervisor.type == SupervisorType.HUMAN_SUPERVISOR and execution_mode == ExecutionMode.MONITORING:
             # If the supervisor is a human superviso and we are in monitoring mode, we automatically approve
             decision = SupervisionDecision(decision=SupervisionDecisionType.APPROVE)
         else:
             # Call the supervisor function to get a decision
-            decision = self.call_supervisor_function(
+            decision = await self.call_supervisor_function(
                 supervisor_func=supervisor_func,
                 tool=tool,
                 tool_call=tool_call,
@@ -356,7 +359,7 @@ class SupervisionRunner:
 
         return decision
 
-    def handle_rejection_with_resampling(
+    async def handle_rejection_with_resampling(
             self,
             failed_tool_call: ToolCall,
             failed_all_decisions: Any,
@@ -436,7 +439,7 @@ class SupervisionRunner:
             resampled_tool_id = resampled_create_new_chat_response.choice_ids[0].tool_call_ids[0].tool_id
 
             # Run supervision again on the resampled tool call
-            processed_tool_call, resampled_all_decisions, modified = self.process_tool_call(
+            processed_tool_call, resampled_all_decisions, modified = await self.process_tool_call(
                 tool_call=resampled_tool_calls[0],  # Only allow one tool_call
                 tool_id=UUID(resampled_tool_id),
                 tool_call_id=UUID(resampled_tool_call_id),
@@ -495,12 +498,12 @@ class SupervisionRunner:
         )
         return feedback_message
 
-    def call_supervisor_function(
+    async def call_supervisor_function(
             self,
-            supervisor_func: Any,
+            supervisor_func: Callable,
             tool: Tool,
             tool_call: ToolCall,
-            supervision_context: Any,
+            supervision_context: SupervisionContext,
             supervision_request_id: UUID,
             decision: Optional[SupervisionDecision] = None
     ) -> SupervisionDecision:
@@ -516,13 +519,11 @@ class SupervisionRunner:
         :return: The decision made by the supervisor.
         """
         if asyncio.iscoroutinefunction(supervisor_func):
-            decision = asyncio.run(
-                supervisor_func(
-                    message=tool_call.message,
-                    supervision_context=supervision_context,
-                    supervision_request_id=supervision_request_id,
-                    previous_decision=decision
-                )
+            decision = await supervisor_func(
+                message=tool_call.message,
+                supervision_context=supervision_context,
+                supervision_request_id=supervision_request_id,
+                previous_decision=decision
             )
         else:
             decision = supervisor_func(
