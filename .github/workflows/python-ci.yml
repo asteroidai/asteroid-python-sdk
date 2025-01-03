@@ -16,6 +16,13 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # Fetch all history for the specified branches
+        ref: ${{ github.head_ref }}
+        fetch-tags: false
+
+    - name: Fetch main branch
+      run: git fetch origin main
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -27,6 +34,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install setuptools wheel
         pip install .
+
+    - name: Run commit message check
+      run: |
+        ./scripts/check_commit_message.sh
 
     - name: Run tests
       run: |
