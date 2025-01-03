@@ -1,18 +1,20 @@
 import asyncio
+import concurrent.futures
 import copy
-import json
+import datetime
+import time
 from typing import Any, Dict, List, Optional, Callable
 from uuid import UUID
 
+import jinja2
 
 from asteroid_sdk.api.api_logger import APILogger
 from asteroid_sdk.api.generated.asteroid_api_client import Client
 from asteroid_sdk.api.generated.asteroid_api_client.api.tool import get_tool
 from asteroid_sdk.api.generated.asteroid_api_client.models import ChoiceIds
+from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor_chain import SupervisorChain
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor_type import SupervisorType
 from asteroid_sdk.api.generated.asteroid_api_client.models.tool import Tool
-from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor import Supervisor
-from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor_chain import SupervisorChain
 from asteroid_sdk.registration.helper import (
     get_supervisor_chains_for_tool,
     send_supervision_request,
@@ -31,7 +33,6 @@ from asteroid_sdk.supervision.config import (
 from asteroid_sdk.supervision.helpers.model_provider_helper import AvailableProviderResponses, ModelProviderHelper
 from asteroid_sdk.supervision.model.tool_call import ToolCall
 from asteroid_sdk.utils.utils import load_template
-import jinja2
 
 
 class SupervisionRunner:
@@ -207,6 +208,7 @@ class SupervisionRunner:
         print(f"Failed to get tool for ID {tool_id}. Skipping.")
         return None
 
+
     async def run_supervisor_chains(
             self,
             supervisors_chains: Any,
@@ -229,28 +231,44 @@ class SupervisionRunner:
         :return: A list of all supervision decisions.
         """
         all_decisions = []
-        for supervisor_chain in supervisors_chains:
-            chain_decisions = await self.run_supervisors_in_chain(
-                supervisor_chain=supervisor_chain,
-                tool=tool,
-                tool_call=tool_call,
-                tool_call_id=tool_call_id,
-                supervision_context=supervision_context,
-                supervisor_chain_id=supervisor_chain.chain_id,
-                execution_mode=execution_mode
-            )
-            all_decisions.extend([chain_decisions])
-            last_decision = chain_decisions[-1]
-            if multi_supervisor_resolution == MultiSupervisorResolution.ALL_MUST_APPROVE and last_decision.decision in [
-                SupervisionDecisionType.ESCALATE,
-                SupervisionDecisionType.REJECT,
-                SupervisionDecisionType.TERMINATE
-            ]:
-                # If all supervisors must approve and one rejects, we can stop
-                break
-            elif last_decision.decision == SupervisionDecisionType.MODIFY:
-                # If modified, we need to run the supervision again with the modified tool call
-                break
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            loop = asyncio.get_running_loop()
+            futures = [
+                loop.run_in_executor(
+                    executor,
+                    lambda: asyncio.run(self.run_supervisors_in_chain(
+                        supervisor_chain,
+                        tool,
+                        tool_call,
+                        tool_call_id,
+                        supervision_context,
+                        supervisor_chain.chain_id,
+                        execution_mode
+                    ))
+                ) for supervisor_chain in supervisors_chains
+            ]
+
+            start_time = time.time()
+            results = await asyncio.gather(*futures)
+            end_time = time.time()
+
+            print(f"Elapsed time: {end_time - start_time} Seconds")
+
+            for chain_decisions in results:
+                all_decisions.extend([chain_decisions])
+                last_decision = chain_decisions[-1]
+                if multi_supervisor_resolution == MultiSupervisorResolution.ALL_MUST_APPROVE and last_decision.decision in [
+                    SupervisionDecisionType.ESCALATE,
+                    SupervisionDecisionType.REJECT,
+                    SupervisionDecisionType.TERMINATE
+                ]:
+                    # If all supervisors must approve and one rejects, we can stop
+                    break
+                elif last_decision.decision == SupervisionDecisionType.MODIFY:
+                    # If modified, we need to run the supervision again with the modified tool call
+                    break
+
         return all_decisions
 
     async def run_supervisors_in_chain(
