@@ -19,7 +19,7 @@ from asteroid_sdk.api.generated.asteroid_api_client.api.run.create_new_chat impo
 )
 from asteroid_sdk.api.generated.asteroid_api_client.models import ChatIds, AsteroidChat, ChatFormat
 from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProviderHelper
-
+from asteroid_sdk.registration.helper import register_tool
 
 class APILogger:
     def __init__(self, client: Client, model_provider_helper: ModelProviderHelper):
@@ -33,6 +33,11 @@ class APILogger:
             run_id: UUID,
     ) -> ChatIds:
         response_data = response if isinstance(response, dict) else response.to_dict()
+        
+        # Register tools if they do not exist
+        if 'tools' in request_kwargs:
+            for tool in request_kwargs['tools']:
+                register_tool(run_id=run_id, tool=tool)
 
         self._debug_print_raw_input(response_data, request_kwargs)
         response_data_str, request_data_str = self._convert_to_json(response_data, request_kwargs)

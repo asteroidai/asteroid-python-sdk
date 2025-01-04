@@ -292,12 +292,24 @@ def register_tool(
 
     # Determine tool details based on its type
     if isinstance(tool, dict):
-        tool_name = tool['name']
-        attributes = CreateRunToolBodyAttributes.from_dict(
-            src_dict=tool.get('input_schema', {}).get('properties', {})
-        )
-        func_code = tool.get('code', '')
-        description = tool.get('description', '')
+        
+        # OpenAI tools can have various formats..TODO: check this
+        function = tool.get('function', {})
+        if function:
+            tool_name = function.get('name', None)
+            description = function.get('description', None)
+            attributes = CreateRunToolBodyAttributes.from_dict(
+                src_dict=function.get('parameters', {}).get('properties', {})
+            )
+            func_code = ""
+        else:        
+            tool_name = tool['name']
+            attributes = CreateRunToolBodyAttributes.from_dict(
+                src_dict=tool.get('input_schema', {}).get('properties', {})
+            )
+            description = tool.get('description', '')
+            func_code = tool.get('code', '')        
+        
     else:
         tool_name = tool.__name__
         func_signature = inspect.signature(tool)
