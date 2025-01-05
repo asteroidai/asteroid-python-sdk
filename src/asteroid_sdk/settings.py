@@ -14,7 +14,7 @@ class Settings:
 
         # Asteroid API settings
         self.api_key = os.getenv('ASTEROID_API_KEY')
-        self.api_url = os.getenv('ASTEROID_API_URL')
+        self.api_url = os.getenv('ASTEROID_API_URL', "https://api.asteroid.ai/api/v1")
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
 
         # Validate required settings
