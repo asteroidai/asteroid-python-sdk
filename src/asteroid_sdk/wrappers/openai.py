@@ -4,6 +4,7 @@ Wrapper for the OpenAI client to intercept requests and responses.
 
 import asyncio
 import logging
+import threading
 from typing import Any, Callable, List, Optional
 from uuid import UUID
 import traceback
@@ -84,39 +85,32 @@ class CompletionsWrapper:
                 raise e
 
     async def create_async(self, *args, message_supervisors: Optional[List[List[Callable]]] = None, **kwargs) -> Any:
-        # Log the entire request payload asynchronously
+        # Log the entire request payload
         try:
-            await asyncio.to_thread(self.chat_supervision_manager.log_request, kwargs, self.run_id)
+            self.chat_supervision_manager.log_request(kwargs, self.run_id)
         except AsteroidLoggingError as e:
             print(f"Warning: Failed to log request: {str(e)}")
-            traceback.print_exc()
+
+        response = self._completions.create(*args, **kwargs)
 
         try:
-            # Make API call synchronously
-            response = self._completions.create(*args, **kwargs)
+            # Make API call
+            thread = threading.Thread(
+                target=self.chat_supervision_manager.handle_language_model_interaction,
+                kwargs={
+                    "response": response, "request_kwargs": kwargs, "run_id": self.run_id,
+                    "execution_mode": self.execution_mode, "completions": self._completions, "args": args,
+                    "message_supervisors": message_supervisors
+                }
+             )
 
-            # ASYNC LOGGING + SUPERVISION
-            # Schedule the log_response to run in the background
-            asyncio.create_task(self.async_log_response(response, kwargs, args, message_supervisors))
-
-            # Return the response immediately
+            thread.start()
             return response
-
         except OpenAIError as e:
             try:
                 raise e
             except AsteroidLoggingError:
                 raise e
-
-    async def async_log_response(self, response, kwargs, args, message_supervisors):
-        try:
-            await asyncio.to_thread(
-                self.chat_supervision_manager.handle_language_model_interaction, response, request_kwargs=kwargs, run_id=self.run_id,
-                execution_mode=self.execution_mode, completions=self._completions, args=args, message_supervisors=message_supervisors
-            )
-        except Exception as e:
-            print(f"Warning: Failed to log response: {str(e)}")
-
 
 def asteroid_openai_client(
     openai_client: Any,

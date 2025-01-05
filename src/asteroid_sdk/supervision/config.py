@@ -26,11 +26,12 @@ class ExecutionMode(str, Enum):
 
 class RejectionPolicy(str, Enum):
     RESAMPLE_WITH_FEEDBACK = "resample_with_feedback"
+    NO_RESAMPLE = "no_resample"
 
 class MultiSupervisorResolution(str, Enum):
     ALL_MUST_APPROVE = "all_must_approve"
     #TODO: We will support more complex resolution strategies in the future
-    
+
 
 
 class ModifiedData(BaseModel):
@@ -75,14 +76,14 @@ class SupervisionContext:
 
     def messages_to_text(self) -> str:
         """Converts the supervision context into a textual description."""
-        
+
         with self.lock:
             # Process OpenAI messages if any
             if self.openai_messages:
                 return self._describe_openai_messages()
             elif self.anthropic_messages:
                 return self._describe_anthropic_messages()
-            
+
         logging.warning("No messages to convert to text")
         return ""
 
@@ -105,17 +106,17 @@ class SupervisionContext:
 
             messages_text.append(message_str)
         return "\n\n".join(messages_text)
-    
-    
+
+
     def _describe_anthropic_messages(self) -> str:
         """Converts the anthropic_messages into a textual description, including tool calls."""
         messages_text = []
         for message in self.anthropic_messages:
             role = message.get('role', 'Unknown').capitalize()
             contents = message.get('content', [])
-                        
+
             message_str = f"**{role}:**"
-            
+
             if isinstance(contents, str):
                 message_str += f"\n{contents}"
             else:
@@ -132,9 +133,9 @@ class SupervisionContext:
                         message_str += f"\n\n**Tool Use:** `{tool_name}`\n**Arguments:** {json.dumps(tool_args, indent=2)}"
                     else:
                         message_str += f"\n\n**Unknown Content Block Type:** {type(content_block)}"
-            
+
             messages_text.append(message_str)
-        
+
         return "\n\n".join(messages_text)
 
 
@@ -207,7 +208,7 @@ class SupervisionContext:
             final_messages = [{"role": "system", "content": system_message}] + messages.copy()
         else:
             final_messages = messages.copy()
-        
+
         with self.lock:
             if anthropic:
                 self.anthropic_messages = final_messages
@@ -221,7 +222,7 @@ class SupervisionContext:
     def get_supervisor_func_by_id(self, supervisor_id: UUID) -> Optional[Callable]:
         """Retrieve a supervisor function by its ID."""
         return self.local_supervisors_by_id.get(supervisor_id)
-    
+
     def get_supervisor_id_by_name(self, supervisor_name: str) -> Optional[UUID]:
         """Retrieve a supervisor function by its function."""
         for supervisor_id, func in self.local_supervisors_by_id.items():
@@ -444,7 +445,7 @@ class SupervisionConfig:
             if tool_name in self.pending_supervised_functions:
                 print(f"Function '{tool_name}' is already pending registration. Skipping.")
                 return  # Skip adding the duplicate
-            
+
             if isinstance(tool, dict):
                 tool_description = str(tool.get('description'))
                 function = tool.get('function')
