@@ -61,7 +61,7 @@ class AsteroidChatSupervisionManager:
             message_supervisors: Optional[List[List[Callable]]] = None
     ) -> Optional[ChatCompletion]: # TODO - Change this to use a generic maybe
         """
-        Send the raw response data to the Sentinel API, and process tool calls
+        Send the raw response data to the Asteroid API, and process tool calls
         through supervision and resampling if necessary.
 
         :param response: The response from the OpenAI API.
