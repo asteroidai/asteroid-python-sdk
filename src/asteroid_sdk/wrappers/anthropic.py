@@ -3,6 +3,7 @@ Wrapper for the Anthropic client to intercept requests and responses.
 """
 
 import asyncio
+import threading
 from typing import Any, Callable, List, Optional
 from uuid import UUID
 import logging
@@ -86,24 +87,28 @@ class CompletionsWrapper:
             except AsteroidLoggingError:
                 raise e
 
+
     async def create_async(self, *args, message_supervisors: Optional[List[List[Callable]]] = None, **kwargs) -> Any:
-        # Log the entire request payload asynchronously
         try:
-            await asyncio.to_thread(self.chat_supervision_manager.log_request, kwargs, self.run_id)
+            self.chat_supervision_manager.log_request(kwargs, self.run_id)
         except AsteroidLoggingError as e:
             print(f"Warning: Failed to log request: {str(e)}")
 
+        response = self._completions.create(*args, **kwargs)
+
         try:
-            # Make API call synchronously
-            response = self._completions.create(*args, **kwargs)
+            # Make API call
+            thread = threading.Thread(
+                target=self.chat_supervision_manager.handle_language_model_interaction,
+                kwargs={
+                    "response": response, "request_kwargs": kwargs, "run_id": self.run_id,
+                    "execution_mode": self.execution_mode, "completions": self._completions, "args": args,
+                    "message_supervisors": message_supervisors
+                }
+            )
 
-            # ASYNC LOGGING + SUPERVISION
-            # Schedule the log_response to run in the background
-            asyncio.create_task(self.async_log_response(response, kwargs, args, message_supervisors))
-
-            # Return the response immediately
+            thread.start()
             return response
-
         except AnthropicError as e:
             try:
                 raise e
