@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo-128-nobg.png" alt="Asteroid AI" width="128"/>
+</p>
+
 # Asteroid Python SDK ☄️
 A Python SDK for interacting with the Asteroid platform. To successfully use Asteroid Python SDK, you need to have a running instance of the Asteroid server. [Book a demo]( https://calendly.com/founders-asteroid-hhaf/30min) with Asteroid founders to get started!
 
@@ -5,9 +9,7 @@ A Python SDK for interacting with the Asteroid platform. To successfully use Ast
 ## Installation
 ```bash
 pip install asteroid-sdk
-```
-
-## Quick Start
+```## Quick Start
 
 ```python
 from asteroid_sdk.wrappers.openai import asteroid_openai_client
@@ -18,7 +20,6 @@ from openai import OpenAI
 
 # Initialize the SDK
 run_id = asteroid_init()
-
 
 # Define your tools with supervisors
 @supervise(supervision_functions=[
@@ -44,4 +45,7 @@ response = wrapped_client.chat.completions.create(
 ## Documentation
 
 For more information, please refer to the [Asteroid Documentation](https://docs.asteroid.ai/)! 
+
+
+
 
