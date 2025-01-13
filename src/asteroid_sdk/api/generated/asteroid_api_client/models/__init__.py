@@ -1,5 +1,6 @@
 """Contains all the data models used in inputs/outputs"""
 
+from .api_key import APIKey
 from .asteroid_chat import AsteroidChat
 from .asteroid_choice import AsteroidChoice
 from .asteroid_choice_finish_reason_type_1 import AsteroidChoiceFinishReasonType1
@@ -23,8 +24,10 @@ from .hub_stats_assigned_reviews import HubStatsAssignedReviews
 from .hub_stats_review_distribution import HubStatsReviewDistribution
 from .message_role import MessageRole
 from .message_type import MessageType
+from .permission import Permission
 from .project import Project
 from .review_payload import ReviewPayload
+from .revoke_api_key_body import RevokeAPIKeyBody
 from .run import Run
 from .run_execution import RunExecution
 from .status import Status
@@ -40,9 +43,11 @@ from .task import Task
 from .tool import Tool
 from .tool_attributes import ToolAttributes
 from .tool_call_ids import ToolCallIds
+from .tool_supervision_result import ToolSupervisionResult
 from .update_run_result_body import UpdateRunResultBody
 
 __all__ = (
+    "APIKey",
     "AsteroidChat",
     "AsteroidChoice",
     "AsteroidChoiceFinishReasonType1",
@@ -66,8 +71,10 @@ __all__ = (
     "HubStatsReviewDistribution",
     "MessageRole",
     "MessageType",
+    "Permission",
     "Project",
     "ReviewPayload",
+    "RevokeAPIKeyBody",
     "Run",
     "RunExecution",
     "Status",
@@ -83,5 +90,6 @@ __all__ = (
     "Tool",
     "ToolAttributes",
     "ToolCallIds",
+    "ToolSupervisionResult",
     "UpdateRunResultBody",
 )

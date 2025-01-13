@@ -1,5 +1,6 @@
 from http import HTTPStatus
 from typing import Any, Dict, Optional, Union
+from uuid import UUID
 
 import httpx
 
@@ -8,10 +9,12 @@ from ...client import AuthenticatedClient, Client
 from ...types import Response
 
 
-def _get_kwargs() -> Dict[str, Any]:
+def _get_kwargs(
+    run_id: UUID,
+) -> Dict[str, Any]:
     _kwargs: Dict[str, Any] = {
-        "method": "get",
-        "url": "/swagger-ui",
+        "method": "delete",
+        "url": f"/run/{run_id}",
     }
 
     return _kwargs
@@ -36,10 +39,14 @@ def _build_response(*, client: Union[AuthenticatedClient, Client], response: htt
 
 
 def sync_detailed(
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
 ) -> Response[Any]:
-    """Get the Swagger UI
+    """Delete a run
+
+    Args:
+        run_id (UUID):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -49,7 +56,9 @@ def sync_detailed(
         Response[Any]
     """
 
-    kwargs = _get_kwargs()
+    kwargs = _get_kwargs(
+        run_id=run_id,
+    )
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -59,10 +68,14 @@ def sync_detailed(
 
 
 async def asyncio_detailed(
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
 ) -> Response[Any]:
-    """Get the Swagger UI
+    """Delete a run
+
+    Args:
+        run_id (UUID):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -72,7 +85,9 @@ async def asyncio_detailed(
         Response[Any]
     """
 
-    kwargs = _get_kwargs()
+    kwargs = _get_kwargs(
+        run_id=run_id,
+    )
 
     response = await client.get_async_httpx_client().request(**kwargs)
 
