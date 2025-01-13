@@ -599,6 +599,7 @@ def send_supervision_result(
 
 
 def wait_for_human_decision(supervision_request_id: UUID, timeout: int = 86400) -> Status:
+def wait_for_human_decision(supervision_request_id: UUID, timeout: int = 86400) -> Status:
     start_time = time.time()
 
     client = APIClientFactory.get_client()
@@ -632,7 +633,6 @@ def wait_for_human_decision(supervision_request_id: UUID, timeout: int = 86400) 
 
 def get_human_supervision_decision_api(
     supervision_request_id: UUID,
-    timeout: int = 3000) -> SupervisionDecision:
     timeout: int = 86400) -> SupervisionDecision:
     """Get the supervision decision from the backend API."""
 
