@@ -180,7 +180,7 @@ def register_inspect_samples_with_asteroid(tasks: Task, project_id: UUID, approv
     return samples    
 
 
-def get_sample_result(sample_id: str, timeout: Optional[int] = 300) -> str:
+def get_sample_result(sample_id: str, timeout: Optional[int] = 86400) -> str:
     """
     Retrieves the result of a sample run by its sample ID.
 
@@ -279,7 +279,7 @@ def register_inspect_samples_with_asteroid_solver(project_name: str) -> Solver:
 
 
 @scorer(metrics=[accuracy(), stderr()])
-def asteroid_web_ui_scorer(timeout: Optional[int] = 300, wait_for_result: bool = True) -> Scorer:
+def asteroid_web_ui_scorer(timeout: Optional[int] = 86400, wait_for_result: bool = True) -> Scorer:
     async def score(state: TaskState, target: Target) -> Score:
         """
         A scorer function for evaluating the results of a task run in the Asteroid UI.

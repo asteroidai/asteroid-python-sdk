@@ -201,7 +201,7 @@ def with_asteroid_supervision(
 
 
 @approver
-def human_approver(timeout: int = 300, n: int = 3) -> Approver:
+def human_approver(timeout: int = 86400, n: int = 3) -> Approver:
     """
     Human approver function for Inspect AI.
 

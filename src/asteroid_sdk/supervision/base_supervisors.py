@@ -318,7 +318,7 @@ def llm_supervisor(
 
 
 def human_supervisor(
-    timeout: int = 300,
+    timeout: int = 86400,
     n: int = 1,
 ) -> Supervisor:
     """
