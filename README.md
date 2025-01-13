@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo-128-nobg.png" alt="Asteroid AI" width="128"/>
+  <img src="logo-128-nobg.png" alt="Asteroid AI" width="96"/>
 </p>
 
 # Asteroid Python SDK ☄️
