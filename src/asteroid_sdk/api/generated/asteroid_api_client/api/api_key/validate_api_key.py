@@ -1,5 +1,6 @@
 from http import HTTPStatus
 from typing import Any, Dict, Optional, Union
+from uuid import UUID
 
 import httpx
 
@@ -8,10 +9,17 @@ from ...client import AuthenticatedClient, Client
 from ...types import Response
 
 
-def _get_kwargs() -> Dict[str, Any]:
+def _get_kwargs(
+    run_id: UUID,
+) -> Dict[str, Any]:
     _kwargs: Dict[str, Any] = {
+<<<<<<<< HEAD:src/asteroid_sdk/api/generated/asteroid_api_client/api/api_key/validate_api_key.py
         "method": "get",
         "url": "/api_key/validate",
+========
+        "method": "delete",
+        "url": f"/run/{run_id}",
+>>>>>>>> 2bb95f8 (Add API key management endpoints and models):src/asteroid_sdk/api/generated/asteroid_api_client/api/run/delete_run.py
     }
 
     return _kwargs
@@ -38,10 +46,18 @@ def _build_response(*, client: Union[AuthenticatedClient, Client], response: htt
 
 
 def sync_detailed(
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
 ) -> Response[Any]:
+<<<<<<<< HEAD:src/asteroid_sdk/api/generated/asteroid_api_client/api/api_key/validate_api_key.py
     """Validate an API key
+========
+    """Delete a run
+
+    Args:
+        run_id (UUID):
+>>>>>>>> 2bb95f8 (Add API key management endpoints and models):src/asteroid_sdk/api/generated/asteroid_api_client/api/run/delete_run.py
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -51,7 +67,9 @@ def sync_detailed(
         Response[Any]
     """
 
-    kwargs = _get_kwargs()
+    kwargs = _get_kwargs(
+        run_id=run_id,
+    )
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -61,10 +79,18 @@ def sync_detailed(
 
 
 async def asyncio_detailed(
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
 ) -> Response[Any]:
+<<<<<<<< HEAD:src/asteroid_sdk/api/generated/asteroid_api_client/api/api_key/validate_api_key.py
     """Validate an API key
+========
+    """Delete a run
+
+    Args:
+        run_id (UUID):
+>>>>>>>> 2bb95f8 (Add API key management endpoints and models):src/asteroid_sdk/api/generated/asteroid_api_client/api/run/delete_run.py
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -74,7 +100,9 @@ async def asyncio_detailed(
         Response[Any]
     """
 
-    kwargs = _get_kwargs()
+    kwargs = _get_kwargs(
+        run_id=run_id,
+    )
 
     response = await client.get_async_httpx_client().request(**kwargs)
 
