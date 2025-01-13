@@ -309,8 +309,8 @@ def find_supervisor_in_chains(supervisor_chains: List, supervisor_name: str):
                 return supervisor, supervisor_chain_id, position_in_chain
     return None, None, None
 
-@approver(name="human_approver")
-def human_approver(timeout: int = 3000, n: int = 3) -> Approver:
+@approver
+def human_approver(timeout: int = 86400, n: int = 3) -> Approver:
     """
     Human approver function for Inspect AI.
 
