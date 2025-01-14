@@ -354,7 +354,7 @@ class SupervisionRunner:
                 return None
 
         if supervisor.type == SupervisorType.HUMAN_SUPERVISOR and execution_mode == ExecutionMode.MONITORING:
-            # If the supervisor is a human superviso and we are in monitoring mode, we automatically approve
+            # If the supervisor is a human supervisor and we are in monitoring mode, we automatically approve
             decision = SupervisionDecision(decision=SupervisionDecisionType.APPROVE)
         else:
             # Call the supervisor function to get a decision
@@ -535,18 +535,14 @@ class SupervisionRunner:
         :param decision: The previous decision, if any.
         :return: The decision made by the supervisor.
         """
-        if asyncio.iscoroutinefunction(supervisor_func):
-            decision = await supervisor_func(
-                message=tool_call.message,
-                supervision_context=supervision_context,
-                supervision_request_id=supervision_request_id,
-                previous_decision=decision
-            )
-        else:
-            decision = supervisor_func(
-                message=tool_call.message,
-                supervision_context=supervision_context,
-                supervision_request_id=supervision_request_id,
-                previous_decision=decision
-                )
+        # Call the supervisor function
+        decision = supervisor_func(
+            message=tool_call.message,
+            supervision_context=supervision_context,
+            supervision_request_id=supervision_request_id,
+            previous_decision=decision
+        )
+        # If the result is a coroutine, await it
+        if asyncio.iscoroutine(decision):
+            decision = await decision
         return decision

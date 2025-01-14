@@ -33,6 +33,7 @@ from .utils import (
     convert_state_messages_to_anthropic_messages,
     convert_state_output_to_anthropic_response,
 )
+import logging
 
 def with_asteroid_supervision(
     supervisor_name_param: Optional[str] = None, n: Optional[int] = None
@@ -188,10 +189,9 @@ def with_asteroid_supervision(
                 )
 
             # Handle modify decision
-            if decision.decision == SupervisionDecisionType.MODIFY:
+            if decision.decision == SupervisionDecisionType.MODIFY and decision.modified is not None:
                 decision.modified.original_inspect_ai_call = call
-
-            print(f"Returning approval: {decision.decision}")
+            logging.info(f"Returning approval: {decision.decision}")
             return transform_asteroid_approval_to_inspect_ai_approval(decision)
 
         wrapper.__name__ = supervisor_name_param or approve_func.__name__
@@ -200,8 +200,8 @@ def with_asteroid_supervision(
     return decorator
 
 
-@approver
-def human_approver(timeout: int = 300, n: int = 3) -> Approver:
+@approver(name="human_approver")
+def human_approver(timeout: int = 3000, n: int = 3) -> Approver:
     """
     Human approver function for Inspect AI.
 
@@ -235,19 +235,20 @@ def human_approver(timeout: int = 300, n: int = 3) -> Approver:
         """
         if supervision_request_id is None:
             raise ValueError("Supervision request ID is required")
-
+        
         # Instantiate the human supervisor function
         human_supervisor_func = human_supervisor(
             timeout=timeout,
             n=n,
         )
 
-        # Call the supervisor function to get the decision
-        decision = human_supervisor_func(
+        # Call the supervisor function to get the decision asynchronously
+        decision = await human_supervisor_func(
             message=message,
             supervision_request_id=supervision_request_id,
             **kwargs,
         )
+        
         return decision
 
     # Set supervisor attributes
@@ -264,7 +265,7 @@ def human_approver(timeout: int = 300, n: int = 3) -> Approver:
     return decorated_approve
 
 
-@approver
+@approver(name="llm_approver")
 def llm_approver(
     instructions: str,
     model: Optional[str] = None,
