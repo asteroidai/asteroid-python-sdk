@@ -615,7 +615,7 @@ def wait_for_human_decision(supervision_request_id: UUID, timeout: int = 86400) 
                     logging.debug(f"Polling for human decision completed. Status: {status}")
                     return status
                 else:
-                    print("Waiting for human supervisor decision...")
+                    logging.debug("Waiting for human supervisor decision...")
             else:
                 logging.warning(f"Unexpected response while polling for supervision status: {response}")
         except Exception as e:
