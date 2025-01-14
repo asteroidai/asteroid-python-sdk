@@ -632,6 +632,7 @@ def wait_for_human_decision(supervision_request_id: UUID, timeout: int = 86400) 
 
 def get_human_supervision_decision_api(
     supervision_request_id: UUID,
+    timeout: int = 3000) -> SupervisionDecision:
     timeout: int = 86400) -> SupervisionDecision:
     """Get the supervision decision from the backend API."""
 
