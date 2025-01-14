@@ -39,14 +39,10 @@ class APILogger:
             request_kwargs: Dict[str, Any],
             run_id: UUID,
     ) -> ChatIds:
-<<<<<<< HEAD
-        response_data = response if isinstance(response, dict) else response.to_dict()
 
         # self._debug_print_raw_input(response_data, request_kwargs)
         response_data_str, request_data_str = self._convert_to_json(response_data, request_kwargs)
-=======
         response_data_str, request_data_str = self._convert_to_json(response, request_kwargs)
->>>>>>> 97fe243 ([SDK-35] feat: Adding Gemini Integration)
         response_data_base64, request_data_base64 = self._encode_to_base64(response_data_str, request_data_str)
 
         body = AsteroidChat(
@@ -86,7 +82,6 @@ class APILogger:
             logging.error(f"Error occurred at line {e.__traceback__.tb_lineno}")
             raise
 
-<<<<<<< HEAD
     def _debug_print_raw_input(
             self, response_data: Dict[str, Any], request_kwargs: Dict[str, Any]
     ) -> None:
@@ -101,8 +96,6 @@ class APILogger:
         logging.debug(f"Raw request_data type: {type(request_kwargs)}")
         logging.debug(f"Raw request_data: {request_kwargs}")
 
-=======
->>>>>>> 97fe243 ([SDK-35] feat: Adding Gemini Integration)
     def _convert_to_json(
             self, response: Any, request_kwargs: Any
     ) -> tuple[str, str]:
