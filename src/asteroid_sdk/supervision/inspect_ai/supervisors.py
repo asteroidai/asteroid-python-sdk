@@ -212,9 +212,10 @@ def with_asteroid_supervision(
                     f"No decision made for supervisor {supervisor_name} in chain {supervisor_chain_id}"
                 )
 
-            # Handle modify decision and attach original call if needed
+            # Handle modify decision
             if decision.decision == SupervisionDecisionType.MODIFY and decision.modified is not None:
                 decision.modified.original_inspect_ai_call = call
+            logging.info(f"Returning approval: {decision.decision}")
             logging.info(f"Returning approval: {decision.decision}")
             return transform_asteroid_approval_to_inspect_ai_approval(decision)
 
@@ -311,6 +312,8 @@ def find_supervisor_in_chains(supervisor_chains: List, supervisor_name: str):
 
 @approver
 def human_approver(timeout: int = 86400, n: int = 3) -> Approver:
+@approver(name="human_approver")
+def human_approver(timeout: int = 3000, n: int = 3) -> Approver:
     """
     Human approver function for Inspect AI.
 
