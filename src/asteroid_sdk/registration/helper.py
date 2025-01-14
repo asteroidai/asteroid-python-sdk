@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 import time
 import copy
 import logging
+import json
 
 from asteroid_sdk.api.generated.asteroid_api_client.client import Client
 from asteroid_sdk.api.generated.asteroid_api_client.models import CreateProjectBody, CreateTaskBody
@@ -21,6 +22,7 @@ from asteroid_sdk.api.generated.asteroid_api_client.types import UNSET
 from asteroid_sdk.api.generated.asteroid_api_client.api.project.create_project import sync_detailed as create_project_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.task.create_task import sync_detailed as create_task_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.tool.create_run_tool import sync_detailed as create_run_tool_sync_detailed
+from asteroid_sdk.api.generated.asteroid_api_client.api.tool_call.get_tool_call_history import sync_detailed as get_tool_call_history_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.create_run import sync_detailed as create_run_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.supervisor.create_supervisor import sync_detailed as create_supervisor_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.supervisor.create_tool_supervisor_chains import sync_detailed as create_tool_supervisor_chains_sync_detailed
@@ -45,7 +47,7 @@ from asteroid_sdk.supervision.model.tool_call import ToolCall
 from asteroid_sdk.api.generated.asteroid_api_client.models.tool import Tool
 from asteroid_sdk.utils.utils import get_function_code
 from asteroid_sdk.settings import settings
-from asteroid_sdk.supervision.config import SupervisionDecision, SupervisionDecisionType
+from asteroid_sdk.supervision.config import SupervisionDecision, SupervisionDecisionType, ModifiedData
 
 class APIClientFactory:
     """Factory for creating API clients with proper authentication."""
@@ -615,17 +617,17 @@ def wait_for_human_decision(supervision_request_id: UUID, timeout: int = 300) ->
                 status = response.parsed.status
                 if isinstance(status, Status) and status in [Status.FAILED, Status.COMPLETED, Status.TIMEOUT]:
                     # Map status to SupervisionDecision
-                    print(f"Polling for human decision completed. Status: {status}")
+                    logging.debug(f"Polling for human decision completed. Status: {status}")
                     return status
                 else:
-                    print("Waiting for human supervisor decision...")
+                    logging.debug("Waiting for human supervisor decision...")
             else:
-                print(f"Unexpected response while polling for supervision status: {response}")
+                logging.warning(f"Unexpected response while polling for supervision status: {response}")
         except Exception as e:
-            print(f"Error while polling for supervision status: {e}")
+            logging.error(f"Error while polling for supervision status: {e}")
 
         if time.time() - start_time > timeout:
-            print(f"Timed out waiting for human supervision decision. Timeout: {timeout} seconds")
+            logging.warning(f"Timed out waiting for human supervision decision. Timeout: {timeout} seconds")
             return Status.TIMEOUT
 
         time.sleep(5)  # Wait for 5 seconds before polling again
@@ -635,7 +637,7 @@ def wait_for_human_decision(supervision_request_id: UUID, timeout: int = 300) ->
 
 def get_human_supervision_decision_api(
     supervision_request_id: UUID,
-    timeout: int = 300) -> SupervisionDecision:
+    timeout: int = 3000) -> SupervisionDecision:
     """Get the supervision decision from the backend API."""
 
     client = APIClientFactory.get_client()
@@ -664,7 +666,7 @@ def get_human_supervision_decision_api(
                                    explanation="The human supervisor is currently busy and has not yet provided a decision.")
     elif supervision_status == 'timeout':
         return SupervisionDecision(decision=SupervisionDecisionType.ESCALATE,
-                                   explanation="The human supervisor did not provide a decision within the timeout period.")
+                                   explanation="Timeout waiting for human supervisor decision.")
     elif supervision_status == 'pending':
         return SupervisionDecision(decision=SupervisionDecisionType.ESCALATE,
                                    explanation="The human supervisor has not yet provided a decision.")
@@ -686,9 +688,21 @@ def map_result_to_decision(result: SupervisionResult) -> SupervisionDecision:
     decision_type = decision_map.get(result.decision.value.lower(), SupervisionDecisionType.ESCALATE)
     modified_output = None
     if decision_type == SupervisionDecisionType.MODIFY:  
-        #TODO: Make the modified output work
-        logging.warning("Modified output not supported yet")
-        modified_output = None
+        client = APIClientFactory.get_client()
+        try:
+            assert result.toolcall_id is not UNSET
+            tool_call_history = get_tool_call_history_sync_detailed(tool_call_id=result.toolcall_id, client=client)
+            if tool_call_history.status_code == 200 and tool_call_history.parsed is not None:
+                tool_call_history = tool_call_history.parsed
+                tool_name = tool_call_history[-1].name
+                kwargs = json.loads(tool_call_history[-1].arguments)
+                modified_output = ModifiedData(
+                    tool_name=tool_name,
+                    tool_kwargs=kwargs,
+                )
+        except Exception as e:
+            logging.error(f"Error getting tool call history: {e}")
+        
     return SupervisionDecision(
         decision=decision_type,
         explanation=result.reasoning,

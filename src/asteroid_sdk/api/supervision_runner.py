@@ -367,13 +367,12 @@ class SupervisionRunner:
             )
         print(f"Supervisor decision: {decision.decision}")
 
-        # Send supervision result back if not a human supervisor
-        if supervisor.type != SupervisorType.HUMAN_SUPERVISOR or execution_mode == ExecutionMode.MONITORING:
-            send_supervision_result(
-                tool_call_id=tool_call_id,
-                supervision_request_id=supervision_request_id,
-                decision=decision,
-            )
+        # Send supervision result back
+        send_supervision_result(
+            tool_call_id=tool_call_id,
+            supervision_request_id=supervision_request_id,
+            decision=decision,
+        )
 
         return decision
 

@@ -265,13 +265,10 @@ def transform_asteroid_approval_to_inspect_ai_approval(approval_decision: Superv
     # Handle the 'modified' field
     modified = None
     if inspect_ai_decision == "modify" and approval_decision.modified is not None:
-        # TODO: Make sure this works
         # Create ToolCall instance directly from the modified data
-        original_call = approval_decision.modified.original_inspect_ai_call
-        # TODO: Figure this one out for N > 1
+        tool_name = approval_decision.modified.tool_name
         tool_kwargs = approval_decision.modified.tool_kwargs or {}
-        if original_call is not None:
-            modified = ToolCall(id=original_call.id, function=original_call.function, arguments=tool_kwargs, type=original_call.type)
+        modified = ToolCall(id=str(uuid.uuid4()), function=tool_name, arguments=tool_kwargs, type="function")
 
 
     return Approval(
