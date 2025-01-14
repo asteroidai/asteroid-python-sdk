@@ -134,17 +134,22 @@ def with_asteroid_supervision(
             )
             choice_ids = create_new_chat_response.choice_ids
 
-            tool_id = choice_ids[0].tool_call_ids[0].tool_id
-            tool_call_id = choice_ids[0].tool_call_ids[0].tool_call_id
+            # When multiple tool calls are made, we need to compare call to the tool call in the choice_ids to find the correct tool_id and tool_call_id
+            idx = 0
+            for idx, _tool_call in enumerate(response.choices[0].message.tool_calls):
+                if _tool_call.id == call.id:
+                    tool_id = choice_ids[0].tool_call_ids[idx].tool_id
+                    tool_call_id = choice_ids[0].tool_call_ids[idx].tool_call_id
+                    break
 
             tool = supervision_runner.get_tool(tool_id)
             response_data_tool_calls = model_provider_helper.get_tool_call_from_response(response)
-            tool_call = response_data_tool_calls[0]
+            tool_call = response_data_tool_calls[idx]
 
             # Get supervisor chains for the tool
             supervisor_chains = get_supervisor_chains_for_tool(tool_id)
             if not supervisor_chains:
-                print(f"No supervisors found for tool ID {tool_id}.")
+                logging.info(f"No supervisors found for tool ID {tool_id}.")
                 return transform_asteroid_approval_to_inspect_ai_approval(
                     SupervisionDecision(
                         decision=SupervisionDecisionType.APPROVE,
