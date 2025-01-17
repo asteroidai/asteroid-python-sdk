@@ -33,6 +33,7 @@ from asteroid_sdk.api.generated.asteroid_api_client.api.supervision.get_supervis
 from asteroid_sdk.api.generated.asteroid_api_client.api.supervisor.get_tool_supervisor_chains import sync_detailed as get_tool_supervisor_chains_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.update_run_status import sync_detailed as update_run_status_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.get_run import sync_detailed as get_run_sync_detailed
+from asteroid_sdk.api.generated.asteroid_api_client.api.run.get_run_messages import sync_detailed as get_run_messages_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor import Supervisor
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor_chain import SupervisorChain
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervision_request import SupervisionRequest
@@ -40,7 +41,7 @@ from asteroid_sdk.api.generated.asteroid_api_client.models.supervision_result im
 from asteroid_sdk.api.generated.asteroid_api_client.models.decision import Decision
 from asteroid_sdk.api.generated.asteroid_api_client.models.status import Status
 from asteroid_sdk.api.generated.asteroid_api_client.models.run import Run
-
+from asteroid_sdk.api.generated.asteroid_api_client.models.asteroid_message import AsteroidMessage
 from asteroid_sdk.supervision.config import SupervisionContext, get_supervision_config
 from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProviderHelper, AvailableProviderResponses
 from asteroid_sdk.supervision.model.tool_call import ToolCall
@@ -527,7 +528,7 @@ def send_supervision_request(tool_call_id: UUID, supervisor_id: UUID, supervisor
         position_in_chain=position_in_chain,
         supervisor_id=supervisor_id
     )
-
+    print(f"Sending supervision request for tool call ID: {tool_call_id}, supervisor ID: {supervisor_id}, supervisor chain ID: {supervisor_chain_id}, position in chain: {position_in_chain}")
     try:
         supervision_request_response = create_supervision_request_sync_detailed(
             client=client,
@@ -549,7 +550,7 @@ def send_supervision_request(tool_call_id: UUID, supervisor_id: UUID, supervisor
         else:
             raise Exception(f"Failed to create supervision request. Response: {supervision_request_response}")
     except Exception as e:
-        print(f"Error creating supervision request: {e}, Response: {supervision_request_response}")
+        print(f"Error creating supervision request: {e}")
         raise
 
 
@@ -770,3 +771,21 @@ def generate_fake_message_tool_call(
         )
 
     return modified_response, [chat_tool_call]
+
+
+def get_run_messages(run_id: UUID, index: int) -> List[AsteroidMessage]:
+    client = APIClientFactory.get_client()
+    try:
+        response = get_run_messages_sync_detailed(
+            client=client,
+            run_id=run_id,
+            index=index
+        )
+        if response.status_code == 200 and response.parsed is not None:
+            return response.parsed
+        else:
+            raise Exception(f"Failed to get run messages. Response: {response}")
+    except Exception as e:
+        print(f"Error getting run messages: {e}")
+        raise
+
