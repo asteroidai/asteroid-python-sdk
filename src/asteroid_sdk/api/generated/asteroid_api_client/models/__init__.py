@@ -1,5 +1,11 @@
 """Contains all the data models used in inputs/outputs"""
 
+from .agent_report import AgentReport
+from .agent_report_failure_categories import AgentReportFailureCategories
+from .agent_report_run_statistics import AgentReportRunStatistics
+from .agent_report_supervisor_statistics import AgentReportSupervisorStatistics
+from .agent_report_supervisor_statistics_reviews_by_type import AgentReportSupervisorStatisticsReviewsByType
+from .agent_report_time_period import AgentReportTimePeriod
 from .api_key import APIKey
 from .asteroid_chat import AsteroidChat
 from .asteroid_choice import AsteroidChoice
@@ -58,6 +64,12 @@ from .tool_supervision_result import ToolSupervisionResult
 from .update_run_result_body import UpdateRunResultBody
 
 __all__ = (
+    "AgentReport",
+    "AgentReportFailureCategories",
+    "AgentReportRunStatistics",
+    "AgentReportSupervisorStatistics",
+    "AgentReportSupervisorStatisticsReviewsByType",
+    "AgentReportTimePeriod",
     "APIKey",
     "AsteroidChat",
     "AsteroidChoice",
