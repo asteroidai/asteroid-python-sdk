@@ -86,7 +86,6 @@ class APILogger:
             logging.error(f"Error occurred at line {e.__traceback__.tb_lineno}")
             raise
 
-<<<<<<< HEAD
     def _debug_print_raw_input(
             self, response_data: Dict[str, Any], request_kwargs: Dict[str, Any]
     ) -> None:
@@ -101,8 +100,6 @@ class APILogger:
         logging.debug(f"Raw request_data type: {type(request_kwargs)}")
         logging.debug(f"Raw request_data: {request_kwargs}")
 
-=======
->>>>>>> 97fe243 ([SDK-35] feat: Adding Gemini Integration)
     def _convert_to_json(
             self, response: Any, request_kwargs: Any
     ) -> tuple[str, str]:
