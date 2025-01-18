@@ -150,6 +150,7 @@ class SupervisionContext:
         supervision_functions: Optional[List[List[Callable]]] = None,
         ignored_attributes: Optional[List[str]] = None,
         function: Optional[Callable | Dict[str, Any]] = None,
+        tool_id: Optional[UUID] = None,
     ):
         """
         Registers a supervised function or tool in the context.
@@ -159,6 +160,7 @@ class SupervisionContext:
             supervision_functions (Optional[List[List[Callable]]]): The supervision functions.
             ignored_attributes (Optional[List[str]]): Attributes to ignore.
             function (Optional[Callable]): The function object, if available.
+            tool_id (Optional[UUID]): The ID of the tool, if available.
         """
         with self.lock:
             if function_name in self.supervised_functions_registry:
@@ -169,6 +171,7 @@ class SupervisionContext:
                 'supervision_functions': supervision_functions or [],
                 'ignored_attributes': ignored_attributes or [],
                 'function': function,  # This will be None if function is not provided
+                'tool_id': tool_id,
             }
             logging.info(f"Registered function '{function_name}' in supervision context")
 

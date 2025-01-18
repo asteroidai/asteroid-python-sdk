@@ -261,11 +261,11 @@ def register_supervisor_chains(
             body=chain_requests
         )
         if association_response.status_code in [200, 201]:
-            print(f"Supervisors assigned to tool with ID {tool_id}")
+            logging.info(f"Supervisors assigned to tool with ID {tool_id}")
         else:
             raise Exception(f"Failed to assign supervisors to tool with ID {tool_id}. Response: {association_response}")
     else:
-        print(f"No supervisors to assign to tool with ID {tool_id}")
+        logging.info(f"No supervisors to assign to tool with ID {tool_id}")
 
 
 def register_tool(
@@ -285,13 +285,6 @@ def register_tool(
         Tool: The registered tool object.
     """
     client = APIClientFactory.get_client()
-    supervision_config = get_supervision_config()
-
-    # Retrieve the run from the supervision configuration
-    run = supervision_config.get_run_by_id(run_id)
-    if run is None:
-        raise Exception(f"Run with ID {run_id} not found in supervision config.")
-    supervision_context = run.supervision_context
 
     # Determine tool details based on its type
     if isinstance(tool, dict):
@@ -332,9 +325,7 @@ def register_tool(
 
     # Update the supervision context with the new tool ID
     tool_api: Tool = tool_response.parsed
-    tool_id = tool_api.id
-    supervision_context.update_tool_id(tool_name, tool_id)
-    print(f"Tool '{tool_name}' registered in the API and locally with ID: {tool_id}")
+    logging.info(f"Tool '{tool_name}' registered in the API")
     return tool_api
 
 def register_tools_and_supervisors_from_registry(
@@ -492,7 +483,7 @@ def register_supervisor(supervisor_name: str,
         else:
             raise ValueError("Invalid supervisor_id: Expected UUID")
 
-        print(f"Supervisor '{supervisor_name}' registered with ID: {supervisor_id}")
+        logging.info(f"Supervisor '{supervisor_name}' registered with ID: {supervisor_id}")
         return supervisor_id
     else:
         raise Exception(f"Failed to register supervisor '{supervisor_name}'. Response: {supervisor_response}")
@@ -512,11 +503,11 @@ def get_supervisor_chains_for_tool(tool_id: UUID) -> List[SupervisorChain]:
         )
         if supervisors_response is not None and supervisors_response.parsed is not None:
             supervisors_list = supervisors_response.parsed  # List[SupervisorChain]
-            print(f"Retrieved {len(supervisors_list)} supervisor chains from the API.")
+            logging.info(f"Retrieved {len(supervisors_list)} supervisor chains from the API.")
         else:
-            print("No supervisors found for this tool and run.")
+            logging.info("No supervisors found for this tool and run.")
     except Exception as e:
-        print(f"Error retrieving supervisors: {e}")
+        logging.error(f"Error retrieving supervisors: {e}")
 
     return supervisors_list
 
@@ -528,7 +519,7 @@ def send_supervision_request(tool_call_id: UUID, supervisor_id: UUID, supervisor
         position_in_chain=position_in_chain,
         supervisor_id=supervisor_id
     )
-    print(f"Sending supervision request for tool call ID: {tool_call_id}, supervisor ID: {supervisor_id}, supervisor chain ID: {supervisor_chain_id}, position in chain: {position_in_chain}")
+    logging.info(f"Sending supervision request for tool call ID: {tool_call_id}, supervisor ID: {supervisor_id}, supervisor chain ID: {supervisor_chain_id}, position in chain: {position_in_chain}")
     try:
         supervision_request_response = create_supervision_request_sync_detailed(
             client=client,
@@ -542,7 +533,7 @@ def send_supervision_request(tool_call_id: UUID, supervisor_id: UUID, supervisor
             supervision_request_response.parsed is not None
         ):
             supervision_request_id = supervision_request_response.parsed
-            print(f"Created supervision request with ID: {supervision_request_id}")
+            logging.info(f"Created supervision request with ID: {supervision_request_id}")
             if isinstance(supervision_request_id, UUID):
                 return supervision_request_id
             else:
@@ -550,7 +541,7 @@ def send_supervision_request(tool_call_id: UUID, supervisor_id: UUID, supervisor
         else:
             raise Exception(f"Failed to create supervision request. Response: {supervision_request_response}")
     except Exception as e:
-        print(f"Error creating supervision request: {e}")
+        logging.error(f"Error creating supervision request: {e}")
         raise
 
 
@@ -595,11 +586,11 @@ def send_supervision_result(
             body=supervision_result
         )
         if response.status_code in [200, 201]:
-            print(f"Successfully submitted supervision result for supervision request ID: {supervision_request_id}")
+            logging.info(f"Successfully submitted supervision result for supervision request ID: {supervision_request_id}")
         else:
             raise Exception(f"Failed to submit supervision result. Response: {response}")
     except Exception as e:
-        print(f"Error submitting supervision result: {e}")
+        logging.error(f"Error submitting supervision result: {e}")
         raise
 
 
@@ -719,11 +710,11 @@ def submit_run_status(run_id: UUID, status: Status):
             body=status
         )
         if response.status_code in [204]:
-            print(f"Successfully submitted run status for run ID: {run_id}")
+            logging.info(f"Successfully submitted run status for run ID: {run_id}")
         else:
             raise Exception(f"Failed to submit run status. Response: {response}")
     except Exception as e:
-        print(f"Error submitting run status: {e}, Response: {response}")
+        logging.error(f"Error submitting run status: {e}, Response: {response}")
         raise
 
 
@@ -743,7 +734,7 @@ def generate_fake_message_tool_call(
     :param message_supervisors: A list of message supervisor callables. If provided, the supervisor chains will be registered with the Asteroid API.
     :return: A tuple containing the modified response and the list of tool calls.
     """
-    print("No tool calls found in response, but message supervisors provided, executing message supervisors")
+    logging.info("No tool calls found in response, but message supervisors provided, executing message supervisors")
 
     modified_response = copy.deepcopy(response)
     chat_tool_call = model_provider_helper.generate_fake_tool_call(modified_response)
@@ -786,6 +777,5 @@ def get_run_messages(run_id: UUID, index: int) -> List[AsteroidMessage]:
         else:
             raise Exception(f"Failed to get run messages. Response: {response}")
     except Exception as e:
-        print(f"Error getting run messages: {e}")
+        logging.error(f"Error getting run messages: {e}")
         raise
-
