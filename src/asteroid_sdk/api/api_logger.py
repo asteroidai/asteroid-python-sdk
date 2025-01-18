@@ -4,6 +4,7 @@ Shared logging functionality for API wrappers.
 
 import base64
 import json
+import logging
 from typing import Any, Dict
 from uuid import UUID
 
@@ -55,14 +56,14 @@ class APILogger:
         :return: The parsed response from the API.
         """
         try:
-            print(f"Sending request to Asteroid API with body: {body}")
+            logging.info(f"Sending request to Asteroid API with body: {body}")
             response = create_new_chat_sync_detailed(
                 client=self.client,
                 run_id=run_id,
                 body=body
             )
-            print(f"API Response status code: {response.status_code}")
-            print(f"API Response content: {response.content}")
+            logging.info(f"API Response status code: {response.status_code}")
+            logging.debug(f"API Response content: {response.content}")
 
             if response.status_code not in [200, 201]:
                 raise ValueError(
@@ -71,12 +72,12 @@ class APILogger:
             if response.parsed is None:
                 raise ValueError("Response was successful but parsed content is None")
 
-            print(f"Successfully logged response for run {run_id}")
-            print(f"Parsed response: {response.parsed}")
+            logging.info(f"Successfully logged response for run {run_id}")
+            logging.debug(f"Parsed response: {response.parsed}")
             return response.parsed
         except Exception as e:
-            print(f"API request error: {str(e)}")
-            print(f"Error occurred at line {e.__traceback__.tb_lineno}")
+            logging.error(f"API request error: {str(e)}")
+            logging.error(f"Error occurred at line {e.__traceback__.tb_lineno}")
             raise
 
     def _debug_print_raw_input(
@@ -88,10 +89,10 @@ class APILogger:
         :param response_data: The raw response data from the API.
         :param request_kwargs: The request keyword arguments.
         """
-        print(f"Raw response_data type: {type(response_data)}")
-        print(f"Raw response_data: {response_data}")
-        print(f"Raw request_data type: {type(request_kwargs)}")
-        print(f"Raw request_data: {request_kwargs}")
+        logging.debug(f"Raw response_data type: {type(response_data)}")
+        logging.debug(f"Raw response_data: {response_data}")
+        logging.debug(f"Raw request_data type: {type(request_kwargs)}")
+        logging.debug(f"Raw request_data: {request_kwargs}")
 
     def _convert_to_json(
             self, response_data: Any, request_kwargs: Any

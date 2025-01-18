@@ -40,7 +40,7 @@ class AsteroidChatSupervisionManager:
         self.model_provider_helper = model_provider_helper
 
 
-    def log_request(self, request_data: Dict[str, Any], run_id: UUID) -> None:
+    async def log_request(self, request_data: Dict[str, Any], run_id: UUID) -> None:
         """
         Log the request data. Currently a no-op as the Asteroid API doesn't require request data
         to be sent separately; it is sent along with the response in `log_response`.
@@ -50,7 +50,7 @@ class AsteroidChatSupervisionManager:
         """
         pass  # No action required.
 
-    def handle_language_model_interaction(
+    async def handle_language_model_interaction(
             self,
             response: ChatCompletion|Message, # TODO - Change this to use a generic maybe
             request_kwargs: Dict[str, Any],
@@ -107,7 +107,7 @@ class AsteroidChatSupervisionManager:
         choice_ids = create_new_chat_response.choice_ids
 
         # Extract execution settings from the supervision configuration
-        new_response = asyncio.run(self.supervision_runner.handle_tool_calls_from_llm_response(
+        new_response = await self.supervision_runner.handle_tool_calls_from_llm_response(
             args=args,
             choice_ids=choice_ids,
             completions=completions,
@@ -118,7 +118,7 @@ class AsteroidChatSupervisionManager:
             run_id=run_id,
             supervision_context=supervision_context,
             message_supervisors=message_supervisors
-        ))
+        )
                                    
         # We need to check if the the new response is our fake message tool call and change it to a normal message
         new_response = self.model_provider_helper.generate_message_from_fake_tool_call(new_response)

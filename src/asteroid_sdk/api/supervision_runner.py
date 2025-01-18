@@ -34,6 +34,7 @@ from asteroid_sdk.supervision.helpers.model_provider_helper import AvailableProv
 from asteroid_sdk.supervision.model.tool_call import ToolCall
 from asteroid_sdk.utils.utils import load_template
 
+import logging
 
 class SupervisionRunner:
 
@@ -165,7 +166,7 @@ class SupervisionRunner:
             return None, None, False
 
         if not supervisors_chains:
-            print(f"No supervisors found for function {tool_id}. Executing function.")
+            logging.info(f"No supervisors found for function {tool_id}. Executing function.")
             return tool_call, None, False
 
         # Run all supervisors in the chains
@@ -205,7 +206,7 @@ class SupervisionRunner:
         tool_response = get_tool.sync_detailed(tool_id=tool_id, client=self.client)
         if tool_response and tool_response.parsed and isinstance(tool_response.parsed, Tool):
             return tool_response.parsed
-        print(f"Failed to get tool for ID {tool_id}. Skipping.")
+        logging.info(f"Failed to get tool for ID {tool_id}. Skipping.")
         return None
 
 
@@ -232,42 +233,34 @@ class SupervisionRunner:
         """
         all_decisions = []
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            loop = asyncio.get_running_loop()
-            futures = [
-                loop.run_in_executor(
-                    executor,
-                    lambda: asyncio.run(self.run_supervisors_in_chain(
-                        supervisor_chain,
-                        tool,
-                        tool_call,
-                        tool_call_id,
-                        supervision_context,
-                        supervisor_chain.chain_id,
-                        execution_mode
-                    ))
-                ) for supervisor_chain in supervisors_chains
-            ]
+        tasks = [
+            self.run_supervisors_in_chain(
+                supervisor_chain,
+                tool,
+                tool_call,
+                tool_call_id,
+                supervision_context,
+                supervisor_chain.chain_id,
+                execution_mode
+            )
+            for supervisor_chain in supervisors_chains
+        ]
 
-            start_time = time.time()
-            results = await asyncio.gather(*futures)
-            end_time = time.time()
+        results = await asyncio.gather(*tasks)
 
-            print(f"Elapsed time: {end_time - start_time} Seconds")
-
-            for chain_decisions in results:
-                all_decisions.extend([chain_decisions])
-                last_decision = chain_decisions[-1]
-                if multi_supervisor_resolution == MultiSupervisorResolution.ALL_MUST_APPROVE and last_decision.decision in [
-                    SupervisionDecisionType.ESCALATE,
-                    SupervisionDecisionType.REJECT,
-                    SupervisionDecisionType.TERMINATE
-                ]:
-                    # If all supervisors must approve and one rejects, we can stop
-                    break
-                elif last_decision.decision == SupervisionDecisionType.MODIFY:
-                    # If modified, we need to run the supervision again with the modified tool call
-                    break
+        for chain_decisions in results:
+            all_decisions.append(chain_decisions)
+            last_decision = chain_decisions[-1]
+            if multi_supervisor_resolution == MultiSupervisorResolution.ALL_MUST_APPROVE and last_decision.decision in [
+                SupervisionDecisionType.ESCALATE,
+                SupervisionDecisionType.REJECT,
+                SupervisionDecisionType.TERMINATE
+            ]:
+                # If all supervisors must approve and one rejects, we can stop
+                break
+            elif last_decision.decision == SupervisionDecisionType.MODIFY:
+                # If modified, we need to run the supervision again with the modified tool call
+                break
 
         return all_decisions
 
@@ -350,7 +343,7 @@ class SupervisionRunner:
             # Get the supervisor function from the context
             supervisor_func = supervision_context.get_supervisor_func_by_id(supervisor.id)
             if not supervisor_func:
-                print(f"No local supervisor function found for ID {supervisor.id}. Skipping.")
+                logging.info(f"No local supervisor function found for ID {supervisor.id}. Skipping.")
                 return None
 
         if supervisor.type == SupervisorType.HUMAN_SUPERVISOR and execution_mode == ExecutionMode.MONITORING:
@@ -365,7 +358,7 @@ class SupervisionRunner:
                 supervision_context=supervision_context,
                 supervision_request_id=supervision_request_id
             )
-        print(f"Supervisor decision: {decision.decision}")
+        logging.info(f"Supervisor decision: {decision.decision}")
 
         # Send supervision result back
         send_supervision_result(
@@ -433,7 +426,7 @@ class SupervisionRunner:
 
             if not resampled_tool_calls:
                 if message_supervisors:
-                    print("No tool calls found in resampled response, but we have message supervisors")
+                    logging.info("No tool calls found in resampled response, but we have message supervisors")
                     # Create fake message tool call
                     resampled_response, resampled_tool_calls = generate_fake_message_tool_call(
                         response=resampled_response,
