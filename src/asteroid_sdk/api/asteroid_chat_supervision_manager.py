@@ -123,13 +123,8 @@ class AsteroidChatSupervisionManager:
             run_id=run_id,
             supervision_context=supervision_context,
             message_supervisors=message_supervisors
-<<<<<<< HEAD
         )
                                    
-=======
-        ))
-
->>>>>>> 97fe243 ([SDK-35] feat: Adding Gemini Integration)
         # We need to check if the the new response is our fake message tool call and change it to a normal message
         new_response = self.model_provider_helper.generate_message_from_fake_tool_call(new_response)
 
