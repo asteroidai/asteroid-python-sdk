@@ -1,49 +1,32 @@
 from http import HTTPStatus
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, cast
 from uuid import UUID
 
 import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.asteroid_chat import AsteroidChat
-from ...models.chat_ids import ChatIds
 from ...models.error_response import ErrorResponse
 from ...types import Response
 
 
 def _get_kwargs(
-    run_id: UUID,
-    *,
-    body: AsteroidChat,
+    project_id: UUID,
 ) -> Dict[str, Any]:
-    headers: Dict[str, Any] = {}
-
     _kwargs: Dict[str, Any] = {
-        "method": "post",
-        "url": f"/run/{run_id}/chat",
+        "method": "delete",
+        "url": f"/project/{project_id}",
     }
 
-    _body = body.to_dict()
-
-    _kwargs["json"] = _body
-    headers["Content-Type"] = "application/json"
-
-    _kwargs["headers"] = headers
     return _kwargs
 
 
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[Union[ChatIds, ErrorResponse]]:
-    if response.status_code == 201:
-        response_201 = ChatIds.from_dict(response.json())
-
-        return response_201
-    if response.status_code == 400:
-        response_400 = ErrorResponse.from_dict(response.json())
-
-        return response_400
+) -> Optional[Union[Any, ErrorResponse]]:
+    if response.status_code == 200:
+        response_200 = cast(Any, None)
+        return response_200
     if response.status_code == 404:
         response_404 = ErrorResponse.from_dict(response.json())
 
@@ -56,7 +39,7 @@ def _parse_response(
 
 def _build_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[Union[ChatIds, ErrorResponse]]:
+) -> Response[Union[Any, ErrorResponse]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -66,29 +49,25 @@ def _build_response(
 
 
 def sync_detailed(
-    run_id: UUID,
+    project_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: AsteroidChat,
-) -> Response[Union[ChatIds, ErrorResponse]]:
-    """Create a new chat completion request from an existing run
+) -> Response[Union[Any, ErrorResponse]]:
+    """Delete a project
 
     Args:
-        run_id (UUID):
-        body (AsteroidChat): The raw b64 encoded JSON of the request and response data
-            sent/received from the LLM.
+        project_id (UUID):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[ChatIds, ErrorResponse]]
+        Response[Union[Any, ErrorResponse]]
     """
 
     kwargs = _get_kwargs(
-        run_id=run_id,
-        body=body,
+        project_id=project_id,
     )
 
     response = client.get_httpx_client().request(
@@ -99,57 +78,49 @@ def sync_detailed(
 
 
 def sync(
-    run_id: UUID,
+    project_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: AsteroidChat,
-) -> Optional[Union[ChatIds, ErrorResponse]]:
-    """Create a new chat completion request from an existing run
+) -> Optional[Union[Any, ErrorResponse]]:
+    """Delete a project
 
     Args:
-        run_id (UUID):
-        body (AsteroidChat): The raw b64 encoded JSON of the request and response data
-            sent/received from the LLM.
+        project_id (UUID):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[ChatIds, ErrorResponse]
+        Union[Any, ErrorResponse]
     """
 
     return sync_detailed(
-        run_id=run_id,
+        project_id=project_id,
         client=client,
-        body=body,
     ).parsed
 
 
 async def asyncio_detailed(
-    run_id: UUID,
+    project_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: AsteroidChat,
-) -> Response[Union[ChatIds, ErrorResponse]]:
-    """Create a new chat completion request from an existing run
+) -> Response[Union[Any, ErrorResponse]]:
+    """Delete a project
 
     Args:
-        run_id (UUID):
-        body (AsteroidChat): The raw b64 encoded JSON of the request and response data
-            sent/received from the LLM.
+        project_id (UUID):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[ChatIds, ErrorResponse]]
+        Response[Union[Any, ErrorResponse]]
     """
 
     kwargs = _get_kwargs(
-        run_id=run_id,
-        body=body,
+        project_id=project_id,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -158,30 +129,26 @@ async def asyncio_detailed(
 
 
 async def asyncio(
-    run_id: UUID,
+    project_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: AsteroidChat,
-) -> Optional[Union[ChatIds, ErrorResponse]]:
-    """Create a new chat completion request from an existing run
+) -> Optional[Union[Any, ErrorResponse]]:
+    """Delete a project
 
     Args:
-        run_id (UUID):
-        body (AsteroidChat): The raw b64 encoded JSON of the request and response data
-            sent/received from the LLM.
+        project_id (UUID):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[ChatIds, ErrorResponse]
+        Union[Any, ErrorResponse]
     """
 
     return (
         await asyncio_detailed(
-            run_id=run_id,
+            project_id=project_id,
             client=client,
-            body=body,
         )
     ).parsed

@@ -1,5 +1,12 @@
 """Contains all the data models used in inputs/outputs"""
 
+from .agent_report import AgentReport
+from .agent_report_failure_categories import AgentReportFailureCategories
+from .agent_report_run_statistics import AgentReportRunStatistics
+from .agent_report_supervisor_statistics import AgentReportSupervisorStatistics
+from .agent_report_supervisor_statistics_reviews_by_type import AgentReportSupervisorStatisticsReviewsByType
+from .agent_report_time_period import AgentReportTimePeriod
+from .api_key import APIKey
 from .asteroid_chat import AsteroidChat
 from .asteroid_choice import AsteroidChoice
 from .asteroid_choice_finish_reason_type_1 import AsteroidChoiceFinishReasonType1
@@ -18,15 +25,23 @@ from .create_run_tool_body_attributes import CreateRunToolBodyAttributes
 from .create_task_body import CreateTaskBody
 from .decision import Decision
 from .error_response import ErrorResponse
+from .failure_category import FailureCategory
+from .failure_report import FailureReport
+from .failure_report_severity import FailureReportSeverity
+from .failure_report_tool_context import FailureReportToolContext
 from .hub_stats import HubStats
 from .hub_stats_assigned_reviews import HubStatsAssignedReviews
 from .hub_stats_review_distribution import HubStatsReviewDistribution
 from .message_role import MessageRole
 from .message_type import MessageType
+from .permission import Permission
 from .project import Project
 from .review_payload import ReviewPayload
+from .revoke_api_key_body import RevokeAPIKeyBody
 from .run import Run
 from .run_execution import RunExecution
+from .run_playback import RunPlayback
+from .segment import Segment
 from .status import Status
 from .supervision_request import SupervisionRequest
 from .supervision_request_state import SupervisionRequestState
@@ -35,14 +50,24 @@ from .supervision_status import SupervisionStatus
 from .supervisor import Supervisor
 from .supervisor_attributes import SupervisorAttributes
 from .supervisor_chain import SupervisorChain
+from .supervisor_stats import SupervisorStats
+from .supervisor_stats_decisions import SupervisorStatsDecisions
 from .supervisor_type import SupervisorType
 from .task import Task
 from .tool import Tool
 from .tool_attributes import ToolAttributes
 from .tool_call_ids import ToolCallIds
+from .tool_supervision_result import ToolSupervisionResult
 from .update_run_result_body import UpdateRunResultBody
 
 __all__ = (
+    "AgentReport",
+    "AgentReportFailureCategories",
+    "AgentReportRunStatistics",
+    "AgentReportSupervisorStatistics",
+    "AgentReportSupervisorStatisticsReviewsByType",
+    "AgentReportTimePeriod",
+    "APIKey",
     "AsteroidChat",
     "AsteroidChoice",
     "AsteroidChoiceFinishReasonType1",
@@ -61,15 +86,23 @@ __all__ = (
     "CreateTaskBody",
     "Decision",
     "ErrorResponse",
+    "FailureCategory",
+    "FailureReport",
+    "FailureReportSeverity",
+    "FailureReportToolContext",
     "HubStats",
     "HubStatsAssignedReviews",
     "HubStatsReviewDistribution",
     "MessageRole",
     "MessageType",
+    "Permission",
     "Project",
     "ReviewPayload",
+    "RevokeAPIKeyBody",
     "Run",
     "RunExecution",
+    "RunPlayback",
+    "Segment",
     "Status",
     "SupervisionRequest",
     "SupervisionRequestState",
@@ -78,10 +111,13 @@ __all__ = (
     "Supervisor",
     "SupervisorAttributes",
     "SupervisorChain",
+    "SupervisorStats",
+    "SupervisorStatsDecisions",
     "SupervisorType",
     "Task",
     "Tool",
     "ToolAttributes",
     "ToolCallIds",
+    "ToolSupervisionResult",
     "UpdateRunResultBody",
 )

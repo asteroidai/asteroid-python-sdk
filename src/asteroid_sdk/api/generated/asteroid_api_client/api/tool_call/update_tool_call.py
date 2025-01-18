@@ -6,22 +6,20 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.asteroid_chat import AsteroidChat
-from ...models.chat_ids import ChatIds
-from ...models.error_response import ErrorResponse
+from ...models.asteroid_tool_call import AsteroidToolCall
 from ...types import Response
 
 
 def _get_kwargs(
-    run_id: UUID,
+    tool_call_id: UUID,
     *,
-    body: AsteroidChat,
+    body: AsteroidToolCall,
 ) -> Dict[str, Any]:
     headers: Dict[str, Any] = {}
 
     _kwargs: Dict[str, Any] = {
-        "method": "post",
-        "url": f"/run/{run_id}/chat",
+        "method": "patch",
+        "url": f"/tool_call/{tool_call_id}",
     }
 
     _body = body.to_dict()
@@ -35,19 +33,11 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[Union[ChatIds, ErrorResponse]]:
-    if response.status_code == 201:
-        response_201 = ChatIds.from_dict(response.json())
+) -> Optional[AsteroidToolCall]:
+    if response.status_code == 200:
+        response_200 = AsteroidToolCall.from_dict(response.json())
 
-        return response_201
-    if response.status_code == 400:
-        response_400 = ErrorResponse.from_dict(response.json())
-
-        return response_400
-    if response.status_code == 404:
-        response_404 = ErrorResponse.from_dict(response.json())
-
-        return response_404
+        return response_200
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
     else:
@@ -56,7 +46,7 @@ def _parse_response(
 
 def _build_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[Union[ChatIds, ErrorResponse]]:
+) -> Response[AsteroidToolCall]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -66,28 +56,27 @@ def _build_response(
 
 
 def sync_detailed(
-    run_id: UUID,
+    tool_call_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: AsteroidChat,
-) -> Response[Union[ChatIds, ErrorResponse]]:
-    """Create a new chat completion request from an existing run
+    body: AsteroidToolCall,
+) -> Response[AsteroidToolCall]:
+    """Update a tool call
 
     Args:
-        run_id (UUID):
-        body (AsteroidChat): The raw b64 encoded JSON of the request and response data
-            sent/received from the LLM.
+        tool_call_id (UUID):
+        body (AsteroidToolCall):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[ChatIds, ErrorResponse]]
+        Response[AsteroidToolCall]
     """
 
     kwargs = _get_kwargs(
-        run_id=run_id,
+        tool_call_id=tool_call_id,
         body=body,
     )
 
@@ -99,56 +88,54 @@ def sync_detailed(
 
 
 def sync(
-    run_id: UUID,
+    tool_call_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: AsteroidChat,
-) -> Optional[Union[ChatIds, ErrorResponse]]:
-    """Create a new chat completion request from an existing run
+    body: AsteroidToolCall,
+) -> Optional[AsteroidToolCall]:
+    """Update a tool call
 
     Args:
-        run_id (UUID):
-        body (AsteroidChat): The raw b64 encoded JSON of the request and response data
-            sent/received from the LLM.
+        tool_call_id (UUID):
+        body (AsteroidToolCall):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[ChatIds, ErrorResponse]
+        AsteroidToolCall
     """
 
     return sync_detailed(
-        run_id=run_id,
+        tool_call_id=tool_call_id,
         client=client,
         body=body,
     ).parsed
 
 
 async def asyncio_detailed(
-    run_id: UUID,
+    tool_call_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: AsteroidChat,
-) -> Response[Union[ChatIds, ErrorResponse]]:
-    """Create a new chat completion request from an existing run
+    body: AsteroidToolCall,
+) -> Response[AsteroidToolCall]:
+    """Update a tool call
 
     Args:
-        run_id (UUID):
-        body (AsteroidChat): The raw b64 encoded JSON of the request and response data
-            sent/received from the LLM.
+        tool_call_id (UUID):
+        body (AsteroidToolCall):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[ChatIds, ErrorResponse]]
+        Response[AsteroidToolCall]
     """
 
     kwargs = _get_kwargs(
-        run_id=run_id,
+        tool_call_id=tool_call_id,
         body=body,
     )
 
@@ -158,29 +145,28 @@ async def asyncio_detailed(
 
 
 async def asyncio(
-    run_id: UUID,
+    tool_call_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: AsteroidChat,
-) -> Optional[Union[ChatIds, ErrorResponse]]:
-    """Create a new chat completion request from an existing run
+    body: AsteroidToolCall,
+) -> Optional[AsteroidToolCall]:
+    """Update a tool call
 
     Args:
-        run_id (UUID):
-        body (AsteroidChat): The raw b64 encoded JSON of the request and response data
-            sent/received from the LLM.
+        tool_call_id (UUID):
+        body (AsteroidToolCall):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[ChatIds, ErrorResponse]
+        AsteroidToolCall
     """
 
     return (
         await asyncio_detailed(
-            run_id=run_id,
+            tool_call_id=tool_call_id,
             client=client,
             body=body,
         )

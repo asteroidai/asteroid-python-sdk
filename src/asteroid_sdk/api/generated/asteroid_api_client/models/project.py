@@ -1,10 +1,13 @@
 import datetime
-from typing import Any, Dict, List, Type, TypeVar, cast
+from typing import Any, Dict, List, Type, TypeVar, Union, cast
 from uuid import UUID
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 from dateutil.parser import isoparse
+
+from ..models.permission import Permission
+from ..types import UNSET, Unset
 
 T = TypeVar("T", bound="Project")
 
@@ -17,12 +20,14 @@ class Project:
         name (str):
         created_at (datetime.datetime):
         run_result_tags (List[str]):
+        permissions (Union[Unset, Permission]):
     """
 
     id: UUID
     name: str
     created_at: datetime.datetime
     run_result_tags: List[str]
+    permissions: Union[Unset, Permission] = UNSET
     additional_properties: Dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -34,6 +39,10 @@ class Project:
 
         run_result_tags = self.run_result_tags
 
+        permissions: Union[Unset, str] = UNSET
+        if not isinstance(self.permissions, Unset):
+            permissions = self.permissions.value
+
         field_dict: Dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -44,6 +53,8 @@ class Project:
                 "run_result_tags": run_result_tags,
             }
         )
+        if permissions is not UNSET:
+            field_dict["permissions"] = permissions
 
         return field_dict
 
@@ -58,11 +69,19 @@ class Project:
 
         run_result_tags = cast(List[str], d.pop("run_result_tags"))
 
+        _permissions = d.pop("permissions", UNSET)
+        permissions: Union[Unset, Permission]
+        if isinstance(_permissions, Unset):
+            permissions = UNSET
+        else:
+            permissions = Permission(_permissions)
+
         project = cls(
             id=id,
             name=name,
             created_at=created_at,
             run_result_tags=run_result_tags,
+            permissions=permissions,
         )
 
         project.additional_properties = d
