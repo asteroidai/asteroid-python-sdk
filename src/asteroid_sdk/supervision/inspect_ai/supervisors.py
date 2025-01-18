@@ -212,7 +212,7 @@ def with_asteroid_supervision(
                     f"No decision made for supervisor {supervisor_name} in chain {supervisor_chain_id}"
                 )
 
-            # Handle modify decision
+            # Handle modify decision and attach original call if needed
             if decision.decision == SupervisionDecisionType.MODIFY and decision.modified is not None:
                 decision.modified.original_inspect_ai_call = call
             logging.info(f"Returning approval: {decision.decision}")
