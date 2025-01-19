@@ -13,7 +13,7 @@ from asteroid_sdk.api.supervision_runner import SupervisionRunner
 from asteroid_sdk.supervision.config import ExecutionMode, RejectionPolicy, MultiSupervisorResolution
 from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProviderHelper
 from tests.acceptance.init_asteroid import InitAsteroidForTestsConfig, init_asteroid_for_tests
-from tests.helper.api.mock_api import make_created_response_with_id, make_ok_response
+from tests.helper.api.mock_api import make_created_response_with_id, make_ok_response, make_created_response
 from tests.helper.tools.get_weather import get_weather_tool_object_dict
 from tests.helper.tools.google_search import get_google_search_tool_object_dict
 
@@ -75,7 +75,7 @@ class AbstractAcceptanceTest(ABC, unittest.TestCase):
 
         # asteroid_sdk.api.asteroid_chat_supervision_manager.AsteroidChatSupervisionManager.handle_language_model_interaction
         # src/asteroid_sdk/api/asteroid_chat_supervision_manager.py:73
-        send_chats_response = make_ok_response(
+        send_chats_response = make_created_response(
             ChatIds(
                 chat_id=first_chat_id,
                 choice_ids=[ChoiceIds(
