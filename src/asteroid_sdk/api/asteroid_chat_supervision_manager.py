@@ -14,6 +14,8 @@ from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProvider
 from asteroid_sdk.supervision.model.tool_call import ToolCall
 from asteroid_sdk.api.generated.asteroid_api_client.models import ChatFormat
 
+import logging
+
 class AsteroidLoggingError(Exception):
     """Raised when there's an error logging to Asteroid API."""
     pass
@@ -151,7 +153,7 @@ class AsteroidChatSupervisionManager:
                 model_provider_helper=self.model_provider_helper,
                 message_supervisors=message_supervisors,
             )
-            print("No tool calls found in response, but message supervisors provided, executing message supervisors")
+            logging.info("No tool calls found in response, but message supervisors provided, executing message supervisors")
 
             return modified_response, response_data_tool_calls
         else:

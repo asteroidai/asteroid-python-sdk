@@ -370,6 +370,9 @@ def register_tools_and_supervisors_from_registry(
         # Register the tool
         tool = register_tool(run_id=run_id, tool=func, ignored_attributes=ignored_attributes)
         tool_id = tool.id
+        
+        # Add the tool_id to the supervision context
+        supervision_context.update_tool_id(function_name=tool_name, tool_id=tool_id)
 
         # Create and register supervisor chains
         supervisor_chain_ids = create_supervisor_chain(run_id=run_id, supervision_functions=supervision_functions)
@@ -612,7 +615,7 @@ def wait_for_human_decision(supervision_request_id: UUID, timeout: int = 300) ->
                     logging.debug(f"Polling for human decision completed. Status: {status}")
                     return status
                 else:
-                    logging.debug("Waiting for human supervisor decision...")
+                    print("Waiting for human supervisor decision...")
             else:
                 logging.warning(f"Unexpected response while polling for supervision status: {response}")
         except Exception as e:

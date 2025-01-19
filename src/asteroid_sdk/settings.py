@@ -4,13 +4,13 @@ Global configuration settings for the Asteroid SDK.
 
 import os
 from dotenv import load_dotenv
-
+import logging
 # Load environment variables from .env file if present
 load_dotenv()
 
 class Settings:
     def __init__(self):
-        print("Initializing settings")
+        logging.info("Initializing Asteroid SDK settings")
 
         # Asteroid API settings
         self.api_key = os.getenv('ASTEROID_API_KEY')
