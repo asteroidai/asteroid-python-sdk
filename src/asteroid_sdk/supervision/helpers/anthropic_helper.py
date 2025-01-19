@@ -1,10 +1,11 @@
 import copy
+import json
 from typing import List
-from uuid import uuid4
 
 from anthropic.types import Message, ToolUseBlock, TextBlock, Usage
+from openai.types.chat import ChatCompletionMessage
 
-from asteroid_sdk.api.generated.asteroid_api_client.models import ChatFormat
+from asteroid_sdk.supervision.helpers.model_provider_helper import Provider
 from asteroid_sdk.supervision.model.tool_call import ToolCall
 from asteroid_sdk.registration.helper import MESSAGE_TOOL_NAME
 
@@ -56,7 +57,7 @@ class AnthropicSupervisionHelper:
         """
         response.content = [tool_call]
         return response
-        
+
     # Not sure about this implementation, maybe add a `response` from llm so we can just clone + modify that
     def generate_new_response_with_rejection_message(self, rejection_message) -> Message:
         text = TextBlock(
@@ -75,5 +76,27 @@ class AnthropicSupervisionHelper:
             ),
         )
 
-    def get_message_format(self) -> ChatFormat:
-        return ChatFormat.ANTHROPIC
+    def get_provider(self) -> Provider:
+        return Provider.ANTHROPIC
+
+    # TODO - Clean this up, just copied the method from main code
+    def convert_model_kwargs_to_json(self, request_kwargs: Message) -> str:
+        messages = request_kwargs.get("messages", [])
+        for idx, message in enumerate(messages):
+            if isinstance(message, ChatCompletionMessage):
+                request_kwargs['messages'][idx] = message.to_dict()
+            else:
+                tool_calls = message.get("tool_calls", [])
+                if tool_calls:
+                    request_kwargs["messages"][idx]["tool_calls"] = [
+                        t.to_dict() if hasattr(t, 'to_dict') else t for t in tool_calls
+                    ]
+        return json.dumps(request_kwargs)
+
+    def resample_response(self, feedback_message, args, request_kwargs, completions):
+        copied_kwargs = copy.deepcopy(request_kwargs)
+        copied_kwargs['messages'].append({
+            "role": "user",
+            "content": feedback_message
+        })
+        return completions.create(*args, **copied_kwargs), copied_kwargs

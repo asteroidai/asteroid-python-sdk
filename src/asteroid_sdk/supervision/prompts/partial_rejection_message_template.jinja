@@ -1,0 +1,10 @@
+The agent requested to execute the following functions, with the results as follows:
+{% for tool in tools %}
+- {{ tool.name }}({{ tool.params }})
+Here is the feedback from the supervisor:
+{{ tool.explanations }}
+{% endfor %}
+
+As one of them rejected, the agent was not able to execute the function.
+
+This is not a message from the user but from a supervisor system that is helping the agent to improve its behavior. You should try something else!

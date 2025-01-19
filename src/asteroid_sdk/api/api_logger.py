@@ -3,6 +3,7 @@ Shared logging functionality for API wrappers.
 """
 
 import base64
+import copy
 import json
 import logging
 from typing import Any, Dict
@@ -19,8 +20,13 @@ from asteroid_sdk.api.generated.asteroid_api_client.api.run.create_new_chat impo
     sync_detailed as create_new_chat_sync_detailed,
 )
 from asteroid_sdk.api.generated.asteroid_api_client.models import ChatIds, AsteroidChat, ChatFormat
-from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProviderHelper
+from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProviderHelper, Provider
 
+provider_to_chat_format = {
+    "openai": ChatFormat.OPENAI,
+    "anthropic": ChatFormat.ANTHROPIC,
+    "gemini": ChatFormat.GEMINI,
+}
 
 class APILogger:
     def __init__(self, client: Client, model_provider_helper: ModelProviderHelper):
@@ -33,16 +39,20 @@ class APILogger:
             request_kwargs: Dict[str, Any],
             run_id: UUID,
     ) -> ChatIds:
+<<<<<<< HEAD
         response_data = response if isinstance(response, dict) else response.to_dict()
 
         # self._debug_print_raw_input(response_data, request_kwargs)
         response_data_str, request_data_str = self._convert_to_json(response_data, request_kwargs)
+=======
+        response_data_str, request_data_str = self._convert_to_json(response, request_kwargs)
+>>>>>>> 97fe243 ([SDK-35] feat: Adding Gemini Integration)
         response_data_base64, request_data_base64 = self._encode_to_base64(response_data_str, request_data_str)
 
         body = AsteroidChat(
             response_data=response_data_base64,
             request_data=request_data_base64,
-            format_=self.model_provider_helper.get_message_format()
+            format_=provider_to_chat_format[self.model_provider_helper.get_provider().value]
         )
 
         return self._send_chats_to_asteroid_api(run_id, body)
@@ -76,6 +86,7 @@ class APILogger:
             logging.error(f"Error occurred at line {e.__traceback__.tb_lineno}")
             raise
 
+<<<<<<< HEAD
     def _debug_print_raw_input(
             self, response_data: Dict[str, Any], request_kwargs: Dict[str, Any]
     ) -> None:
@@ -90,8 +101,10 @@ class APILogger:
         logging.debug(f"Raw request_data type: {type(request_kwargs)}")
         logging.debug(f"Raw request_data: {request_kwargs}")
 
+=======
+>>>>>>> 97fe243 ([SDK-35] feat: Adding Gemini Integration)
     def _convert_to_json(
-            self, response_data: Any, request_kwargs: Any
+            self, response: Any, request_kwargs: Any
     ) -> tuple[str, str]:
         """
         Convert the response and request data to JSON strings.
@@ -101,29 +114,33 @@ class APILogger:
         :return: A tuple containing the response and request data as JSON strings.
         """
         # Convert response_data to a JSON string
-        if hasattr(response_data, 'model_dump_json'):
-            response_data_str = response_data.model_dump_json()
-        elif hasattr(response_data, 'to_dict'):
-            response_data_str = json.dumps(response_data.to_dict())
-        else:
-            response_data_str = json.dumps(response_data)
+        # TODO - Confirm I can remove the bit that I've removed. We were already converting to a dict above
+
+        # response_data = response if isinstance(response, dict) else response.to_dict()
+        # if hasattr(response_data, 'model_dump_json'):
+        #     response_data_str = response_data.model_dump_json()
+        # elif hasattr(response_data, 'to_dict'):
+        #     response_data = response if isinstance(response, dict) else response.to_dict()
+        #     response_data_str = json.dumps(response_data.to_dict())
+        # else:
+        #     response_data_str = json.dumps(response_data)
+
+        # TODO - probably remove below aswell, it's custom types testing
+        # if self.model_provider_helper.get_provider() in [Provider.OPENAI, Provider.ANTHROPIC]:
+        #     response_dict = response.to_dict()
+        #     response_data_str = json.dumps(response_dict)
+        # elif self.model_provider_helper.get_provider() == Provider.GEMINI:
+        #     response_data_str = response._pb.SerializeToString()
+
+        response_dict = response.to_dict()
+        response_data_str = json.dumps(response_dict)
 
         # Convert request_kwargs to a JSON string
         if isinstance(request_kwargs, str):
             request_data_str = request_kwargs
         else:
             # Ensure tool_calls are converted to dictionaries
-            messages = request_kwargs.get("messages", [])
-            for idx, message in enumerate(messages):
-                if isinstance(message, ChatCompletionMessage):
-                    request_kwargs['messages'][idx] = message.to_dict()
-                else:
-                    tool_calls = message.get("tool_calls", [])
-                    if tool_calls:
-                        request_kwargs["messages"][idx]["tool_calls"] = [
-                            t.to_dict() if hasattr(t, 'to_dict') else t for t in tool_calls
-                        ]
-            request_data_str = json.dumps(request_kwargs)
+            request_data_str = self.model_provider_helper.convert_model_kwargs_to_json(request_kwargs)
 
         return response_data_str, request_data_str
 

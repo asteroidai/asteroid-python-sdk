@@ -11,6 +11,8 @@ from anthropic.types import Message, TextBlock, ToolUseBlock
 from pydantic import BaseModel, Field
 import logging
 
+from asteroid_sdk.supervision.helpers.model_provider_helper import Provider
+
 DEFAULT_RUN_NAME = "default"
 
 class SupervisionDecisionType(str, Enum):
@@ -71,6 +73,7 @@ class SupervisionContext:
         self.metadata: Dict[str, Any] = {}
         self.openai_messages: List[Dict[str, Any]] = []
         self.anthropic_messages: List[Dict[str, Any]] = []
+        self.gemini_messages: List[Dict[str, Any]] = []
         self.supervised_functions_registry: Dict[str, Dict[str, Any]] = pending_functions or {}
         self.registered_supervisors: Dict[str, UUID] = {}
         self.local_supervisors_by_id: Dict[UUID, Callable] = {}
@@ -208,7 +211,7 @@ class SupervisionContext:
         with self.lock:
             return self.registered_supervisors.get(supervisor_name)
 
-    def update_messages(self, messages: List[Dict[str, Any]], anthropic: bool = False, system_message: Optional[str] = None):
+    def update_messages(self, messages: List[Dict[str, Any]], provider: Provider, system_message: Optional[str] = None):
         """Updates the context with a list of OpenAI messages."""
         if system_message:
             # Anthropic stores the system message outside of the messages list
@@ -217,10 +220,12 @@ class SupervisionContext:
             final_messages = messages.copy()
 
         with self.lock:
-            if anthropic:
-                self.anthropic_messages = final_messages
-            else:
-                self.openai_messages = final_messages
+            if provider == Provider.ANTHROPIC:
+                self.anthropic_messages = final_messages['messages']
+            elif provider == Provider.OPENAI:
+                self.openai_messages = final_messages['messages']
+            elif provider == Provider.GEMINI:
+                self.gemini_messages = final_messages['contents']
 
     def add_local_supervisor(self, supervisor_id: UUID, supervisor_func: Callable):
         """Add a supervisor function to the config."""

@@ -10,7 +10,7 @@ from asteroid_sdk.api.generated.asteroid_api_client import Client
 from asteroid_sdk.supervision.config import get_supervision_config
 from asteroid_sdk.api.supervision_runner import SupervisionRunner
 from asteroid_sdk.registration.helper import generate_fake_message_tool_call
-from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProviderHelper
+from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProviderHelper, Provider
 from asteroid_sdk.supervision.model.tool_call import ToolCall
 from asteroid_sdk.api.generated.asteroid_api_client.models import ChatFormat
 
@@ -85,8 +85,8 @@ class AsteroidChatSupervisionManager:
 
         supervision_context = run.supervision_context
         # Update messages on the supervision context
-        supervision_context.update_messages(request_kwargs['messages'], 
-                                            anthropic=self.model_provider_helper.get_message_format() == ChatFormat.ANTHROPIC,
+        supervision_context.update_messages(request_kwargs,
+                                            provider=self.model_provider_helper.get_provider(), # TODO Change this to get it from the provider helper
                                             system_message=request_kwargs.get('system', None))
 
         response, response_data_tool_calls = self.get_tool_calls_and_modify_response_if_necessary(
@@ -103,7 +103,7 @@ class AsteroidChatSupervisionManager:
             run_id,
         )
 
-        if not response_data_tool_calls: # TODO - THIS WAS WHERE IT WAS FAILING
+        if not response_data_tool_calls:
             return None
 
         choice_ids = create_new_chat_response.choice_ids
@@ -120,6 +120,8 @@ class AsteroidChatSupervisionManager:
             run_id=run_id,
             supervision_context=supervision_context,
             message_supervisors=message_supervisors
+        ))
+
         )
                                    
         # We need to check if the the new response is our fake message tool call and change it to a normal message
