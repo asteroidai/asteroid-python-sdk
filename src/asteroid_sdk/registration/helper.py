@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 import time
 import copy
 import logging
+import json
 
 from asteroid_sdk.api.generated.asteroid_api_client.client import Client
 from asteroid_sdk.api.generated.asteroid_api_client.models import CreateProjectBody, CreateTaskBody
@@ -21,6 +22,7 @@ from asteroid_sdk.api.generated.asteroid_api_client.types import UNSET
 from asteroid_sdk.api.generated.asteroid_api_client.api.project.create_project import sync_detailed as create_project_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.task.create_task import sync_detailed as create_task_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.tool.create_run_tool import sync_detailed as create_run_tool_sync_detailed
+from asteroid_sdk.api.generated.asteroid_api_client.api.tool_call.get_tool_call_history import sync_detailed as get_tool_call_history_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.create_run import sync_detailed as create_run_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.supervisor.create_supervisor import sync_detailed as create_supervisor_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.supervisor.create_tool_supervisor_chains import sync_detailed as create_tool_supervisor_chains_sync_detailed
@@ -31,6 +33,7 @@ from asteroid_sdk.api.generated.asteroid_api_client.api.supervision.get_supervis
 from asteroid_sdk.api.generated.asteroid_api_client.api.supervisor.get_tool_supervisor_chains import sync_detailed as get_tool_supervisor_chains_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.update_run_status import sync_detailed as update_run_status_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.get_run import sync_detailed as get_run_sync_detailed
+from asteroid_sdk.api.generated.asteroid_api_client.api.run.get_run_messages import sync_detailed as get_run_messages_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor import Supervisor
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor_chain import SupervisorChain
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervision_request import SupervisionRequest
@@ -38,14 +41,14 @@ from asteroid_sdk.api.generated.asteroid_api_client.models.supervision_result im
 from asteroid_sdk.api.generated.asteroid_api_client.models.decision import Decision
 from asteroid_sdk.api.generated.asteroid_api_client.models.status import Status
 from asteroid_sdk.api.generated.asteroid_api_client.models.run import Run
-
+from asteroid_sdk.api.generated.asteroid_api_client.models.asteroid_message import AsteroidMessage
 from asteroid_sdk.supervision.config import SupervisionContext, get_supervision_config
 from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProviderHelper, AvailableProviderResponses
 from asteroid_sdk.supervision.model.tool_call import ToolCall
 from asteroid_sdk.api.generated.asteroid_api_client.models.tool import Tool
 from asteroid_sdk.utils.utils import get_function_code
 from asteroid_sdk.settings import settings
-from asteroid_sdk.supervision.config import SupervisionDecision, SupervisionDecisionType
+from asteroid_sdk.supervision.config import SupervisionDecision, SupervisionDecisionType, ModifiedData
 
 class APIClientFactory:
     """Factory for creating API clients with proper authentication."""
@@ -258,11 +261,11 @@ def register_supervisor_chains(
             body=chain_requests
         )
         if association_response.status_code in [200, 201]:
-            print(f"Supervisors assigned to tool with ID {tool_id}")
+            logging.info(f"Supervisors assigned to tool with ID {tool_id}")
         else:
             raise Exception(f"Failed to assign supervisors to tool with ID {tool_id}. Response: {association_response}")
     else:
-        print(f"No supervisors to assign to tool with ID {tool_id}")
+        logging.info(f"No supervisors to assign to tool with ID {tool_id}")
 
 
 def register_tool(
@@ -282,13 +285,6 @@ def register_tool(
         Tool: The registered tool object.
     """
     client = APIClientFactory.get_client()
-    supervision_config = get_supervision_config()
-
-    # Retrieve the run from the supervision configuration
-    run = supervision_config.get_run_by_id(run_id)
-    if run is None:
-        raise Exception(f"Run with ID {run_id} not found in supervision config.")
-    supervision_context = run.supervision_context
 
     # Determine tool details based on its type
     if isinstance(tool, dict):
@@ -329,9 +325,7 @@ def register_tool(
 
     # Update the supervision context with the new tool ID
     tool_api: Tool = tool_response.parsed
-    tool_id = tool_api.id
-    supervision_context.update_tool_id(tool_name, tool_id)
-    print(f"Tool '{tool_name}' registered in the API and locally with ID: {tool_id}")
+    logging.info(f"Tool '{tool_name}' registered in the API")
     return tool_api
 
 def register_tools_and_supervisors_from_registry(
@@ -376,6 +370,9 @@ def register_tools_and_supervisors_from_registry(
         # Register the tool
         tool = register_tool(run_id=run_id, tool=func, ignored_attributes=ignored_attributes)
         tool_id = tool.id
+        
+        # Add the tool_id to the supervision context
+        supervision_context.update_tool_id(function_name=tool_name, tool_id=tool_id)
 
         # Create and register supervisor chains
         supervisor_chain_ids = create_supervisor_chain(run_id=run_id, supervision_functions=supervision_functions)
@@ -489,7 +486,7 @@ def register_supervisor(supervisor_name: str,
         else:
             raise ValueError("Invalid supervisor_id: Expected UUID")
 
-        print(f"Supervisor '{supervisor_name}' registered with ID: {supervisor_id}")
+        logging.info(f"Supervisor '{supervisor_name}' registered with ID: {supervisor_id}")
         return supervisor_id
     else:
         raise Exception(f"Failed to register supervisor '{supervisor_name}'. Response: {supervisor_response}")
@@ -509,11 +506,11 @@ def get_supervisor_chains_for_tool(tool_id: UUID) -> List[SupervisorChain]:
         )
         if supervisors_response is not None and supervisors_response.parsed is not None:
             supervisors_list = supervisors_response.parsed  # List[SupervisorChain]
-            print(f"Retrieved {len(supervisors_list)} supervisor chains from the API.")
+            logging.info(f"Retrieved {len(supervisors_list)} supervisor chains from the API.")
         else:
-            print("No supervisors found for this tool and run.")
+            logging.info("No supervisors found for this tool and run.")
     except Exception as e:
-        print(f"Error retrieving supervisors: {e}")
+        logging.error(f"Error retrieving supervisors: {e}")
 
     return supervisors_list
 
@@ -525,7 +522,7 @@ def send_supervision_request(tool_call_id: UUID, supervisor_id: UUID, supervisor
         position_in_chain=position_in_chain,
         supervisor_id=supervisor_id
     )
-
+    logging.info(f"Sending supervision request for tool call ID: {tool_call_id}, supervisor ID: {supervisor_id}, supervisor chain ID: {supervisor_chain_id}, position in chain: {position_in_chain}")
     try:
         supervision_request_response = create_supervision_request_sync_detailed(
             client=client,
@@ -539,7 +536,7 @@ def send_supervision_request(tool_call_id: UUID, supervisor_id: UUID, supervisor
             supervision_request_response.parsed is not None
         ):
             supervision_request_id = supervision_request_response.parsed
-            print(f"Created supervision request with ID: {supervision_request_id}")
+            logging.info(f"Created supervision request with ID: {supervision_request_id}")
             if isinstance(supervision_request_id, UUID):
                 return supervision_request_id
             else:
@@ -547,7 +544,7 @@ def send_supervision_request(tool_call_id: UUID, supervisor_id: UUID, supervisor
         else:
             raise Exception(f"Failed to create supervision request. Response: {supervision_request_response}")
     except Exception as e:
-        print(f"Error creating supervision request: {e}, Response: {supervision_request_response}")
+        logging.error(f"Error creating supervision request: {e}")
         raise
 
 
@@ -592,11 +589,11 @@ def send_supervision_result(
             body=supervision_result
         )
         if response.status_code in [200, 201]:
-            print(f"Successfully submitted supervision result for supervision request ID: {supervision_request_id}")
+            logging.info(f"Successfully submitted supervision result for supervision request ID: {supervision_request_id}")
         else:
             raise Exception(f"Failed to submit supervision result. Response: {response}")
     except Exception as e:
-        print(f"Error submitting supervision result: {e}")
+        logging.error(f"Error submitting supervision result: {e}")
         raise
 
 
@@ -615,17 +612,17 @@ def wait_for_human_decision(supervision_request_id: UUID, timeout: int = 86400) 
                 status = response.parsed.status
                 if isinstance(status, Status) and status in [Status.FAILED, Status.COMPLETED, Status.TIMEOUT]:
                     # Map status to SupervisionDecision
-                    print(f"Polling for human decision completed. Status: {status}")
+                    logging.debug(f"Polling for human decision completed. Status: {status}")
                     return status
                 else:
-                    print("Waiting for human supervisor decision...")
+                    logging.debug("Waiting for human supervisor decision...")
             else:
-                print(f"Unexpected response while polling for supervision status: {response}")
+                logging.warning(f"Unexpected response while polling for supervision status: {response}")
         except Exception as e:
-            print(f"Error while polling for supervision status: {e}")
+            logging.error(f"Error while polling for supervision status: {e}")
 
         if time.time() - start_time > timeout:
-            print(f"Timed out waiting for human supervision decision. Timeout: {timeout} seconds")
+            logging.warning(f"Timed out waiting for human supervision decision. Timeout: {timeout} seconds")
             return Status.TIMEOUT
 
         time.sleep(5)  # Wait for 5 seconds before polling again
@@ -664,7 +661,7 @@ def get_human_supervision_decision_api(
                                    explanation="The human supervisor is currently busy and has not yet provided a decision.")
     elif supervision_status == 'timeout':
         return SupervisionDecision(decision=SupervisionDecisionType.ESCALATE,
-                                   explanation="The human supervisor did not provide a decision within the timeout period.")
+                                   explanation="Timeout waiting for human supervisor decision.")
     elif supervision_status == 'pending':
         return SupervisionDecision(decision=SupervisionDecisionType.ESCALATE,
                                    explanation="The human supervisor has not yet provided a decision.")
@@ -686,9 +683,21 @@ def map_result_to_decision(result: SupervisionResult) -> SupervisionDecision:
     decision_type = decision_map.get(result.decision.value.lower(), SupervisionDecisionType.ESCALATE)
     modified_output = None
     if decision_type == SupervisionDecisionType.MODIFY:  
-        #TODO: Make the modified output work
-        logging.warning("Modified output not supported yet")
-        modified_output = None
+        client = APIClientFactory.get_client()
+        try:
+            assert result.toolcall_id is not UNSET
+            tool_call_history = get_tool_call_history_sync_detailed(tool_call_id=result.toolcall_id, client=client)
+            if tool_call_history.status_code == 200 and tool_call_history.parsed is not None:
+                tool_call_history = tool_call_history.parsed
+                tool_name = tool_call_history[-1].name
+                kwargs = json.loads(tool_call_history[-1].arguments)
+                modified_output = ModifiedData(
+                    tool_name=tool_name,
+                    tool_kwargs=kwargs,
+                )
+        except Exception as e:
+            logging.error(f"Error getting tool call history: {e}")
+        
     return SupervisionDecision(
         decision=decision_type,
         explanation=result.reasoning,
@@ -704,11 +713,11 @@ def submit_run_status(run_id: UUID, status: Status):
             body=status
         )
         if response.status_code in [204]:
-            print(f"Successfully submitted run status for run ID: {run_id}")
+            logging.info(f"Successfully submitted run status for run ID: {run_id}")
         else:
             raise Exception(f"Failed to submit run status. Response: {response}")
     except Exception as e:
-        print(f"Error submitting run status: {e}, Response: {response}")
+        logging.error(f"Error submitting run status: {e}, Response: {response}")
         raise
 
 
@@ -728,7 +737,7 @@ def generate_fake_message_tool_call(
     :param message_supervisors: A list of message supervisor callables. If provided, the supervisor chains will be registered with the Asteroid API.
     :return: A tuple containing the modified response and the list of tool calls.
     """
-    print("No tool calls found in response, but message supervisors provided, executing message supervisors")
+    logging.info("No tool calls found in response, but message supervisors provided, executing message supervisors")
 
     modified_response = copy.deepcopy(response)
     chat_tool_call = model_provider_helper.generate_fake_tool_call(modified_response)
@@ -756,3 +765,20 @@ def generate_fake_message_tool_call(
         )
 
     return modified_response, [chat_tool_call]
+
+
+def get_run_messages(run_id: UUID, index: int) -> List[AsteroidMessage]:
+    client = APIClientFactory.get_client()
+    try:
+        response = get_run_messages_sync_detailed(
+            client=client,
+            run_id=run_id,
+            index=index
+        )
+        if response.status_code == 200 and response.parsed is not None:
+            return response.parsed
+        else:
+            raise Exception(f"Failed to get run messages. Response: {response}")
+    except Exception as e:
+        logging.error(f"Error getting run messages: {e}")
+        raise

@@ -200,9 +200,9 @@ def get_sample_result(sample_id: str, timeout: Optional[int] = 86400) -> str:
     i = 0
     while timeout is None or i < timeout:
         run = get_run(run_id)
-        logging.info(f"Getting result for run {run_id}")
+        logging.debug(f"Getting result for run {run_id}")
         if run.result != '':
-            logging.info(f"Run {run_id} is {run.result}")
+            logging.debug(f"Run {run_id} is {run.result}")
             return run.result
         time.sleep(2)
         i += 2
@@ -226,7 +226,7 @@ def update_run_status_by_sample_id(sample_id: str, status: Status) -> None:
     local_run = supervision_config.get_run_by_name(sample_id)
     run_id = local_run.run_id
     submit_run_status(run_id, status)
-    logging.info(f"Updated run {run_id} status to {status}")
+    logging.debug(f"Updated run {run_id} status to {status}")
 
 
 @solver
@@ -296,7 +296,7 @@ def asteroid_web_ui_scorer(timeout: Optional[int] = 86400, wait_for_result: bool
         
         # Retrieve the result of the run if waiting for the result is enabled
         if wait_for_result:
-            print(f"Waiting for human to score sample in the web UI {state.sample_id}")
+            logging.info(f"Waiting for human to score sample in the web UI {state.sample_id}")
             result = get_sample_result(str(state.sample_id), timeout=timeout)
         else:
             result = ''

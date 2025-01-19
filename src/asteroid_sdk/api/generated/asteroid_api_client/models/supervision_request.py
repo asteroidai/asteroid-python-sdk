@@ -1,8 +1,10 @@
+import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Type, TypeVar, Union
 from uuid import UUID
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
+from dateutil.parser import isoparse
 
 from ..types import UNSET, Unset
 
@@ -22,6 +24,7 @@ class SupervisionRequest:
         id (Union[Unset, UUID]):
         chainexecution_id (Union[Unset, UUID]):
         status (Union[Unset, SupervisionStatus]):
+        last_status_checked_at (Union[Unset, datetime.datetime]):
     """
 
     supervisor_id: UUID
@@ -29,6 +32,7 @@ class SupervisionRequest:
     id: Union[Unset, UUID] = UNSET
     chainexecution_id: Union[Unset, UUID] = UNSET
     status: Union[Unset, "SupervisionStatus"] = UNSET
+    last_status_checked_at: Union[Unset, datetime.datetime] = UNSET
     additional_properties: Dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -48,6 +52,10 @@ class SupervisionRequest:
         if not isinstance(self.status, Unset):
             status = self.status.to_dict()
 
+        last_status_checked_at: Union[Unset, str] = UNSET
+        if not isinstance(self.last_status_checked_at, Unset):
+            last_status_checked_at = self.last_status_checked_at.isoformat()
+
         field_dict: Dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -62,6 +70,8 @@ class SupervisionRequest:
             field_dict["chainexecution_id"] = chainexecution_id
         if status is not UNSET:
             field_dict["status"] = status
+        if last_status_checked_at is not UNSET:
+            field_dict["last_status_checked_at"] = last_status_checked_at
 
         return field_dict
 
@@ -95,12 +105,20 @@ class SupervisionRequest:
         else:
             status = SupervisionStatus.from_dict(_status)
 
+        _last_status_checked_at = d.pop("last_status_checked_at", UNSET)
+        last_status_checked_at: Union[Unset, datetime.datetime]
+        if isinstance(_last_status_checked_at, Unset):
+            last_status_checked_at = UNSET
+        else:
+            last_status_checked_at = isoparse(_last_status_checked_at)
+
         supervision_request = cls(
             supervisor_id=supervisor_id,
             position_in_chain=position_in_chain,
             id=id,
             chainexecution_id=chainexecution_id,
             status=status,
+            last_status_checked_at=last_status_checked_at,
         )
 
         supervision_request.additional_properties = d

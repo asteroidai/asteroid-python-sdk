@@ -20,6 +20,7 @@ from jsonschema import validate, ValidationError, SchemaError
 from pydantic import BaseModel
 import anthropic
 import os
+import asyncio
 
 DEFAULT_OPENAI_LLM_MODEL = "gpt-4o"
 DEFAULT_ANTHROPIC_LLM_MODEL = "claude-3-5-sonnet-latest"
@@ -333,7 +334,7 @@ def human_supervisor(
     """
 
     @supervisor
-    def supervisor_function(
+    async def supervisor_function(
         message: Union[ChatCompletionMessage, AnthropicMessage],
         supervision_request_id: Optional[UUID] = None,
         **kwargs
@@ -350,8 +351,9 @@ def human_supervisor(
         if supervision_request_id is None:
             raise ValueError("Supervision request ID is required")
 
-        # Get the human supervision decision
-        supervisor_decision = get_human_supervision_decision_api(
+        # Get the human supervision decision asynchronously
+        supervisor_decision = await asyncio.to_thread(
+            get_human_supervision_decision_api,
             supervision_request_id=supervision_request_id,
             timeout=timeout,
         )

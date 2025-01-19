@@ -21,14 +21,13 @@ def asteroid_init(
     """
     Initializes supervision for a project, task, and run.
     """
-    check_config_validity(execution_settings)
 
     project_id = register_project(project_name)
-    print(f"Registered new project '{project_name}' with ID: {project_id}")
+    logging.info(f"Registered new project '{project_name}' with ID: {project_id}")
     task_id = register_task(project_id, task_name)
-    print(f"Registered new task '{task_name}' with ID: {task_id}")
+    logging.info(f"Registered new task '{task_name}' with ID: {task_id}")
     run_id = create_run(project_id, task_id, run_name)
-    print(f"Registered new run with ID: {run_id}")
+    logging.info(f"Registered new run with ID: {run_id}")
 
     supervision_config = get_supervision_config()
     supervision_config.set_execution_settings(execution_settings)
@@ -75,6 +74,23 @@ def register_tool_with_supervisors(
             supervisor_chain_ids=supervisor_chain_ids
         )
         
+        # Register the tool and supervisors in the supervision context
+        supervision_config = get_supervision_config()
+
+        # Add the tool and supervisors to the supervision context as well
+        run = supervision_config.get_run_by_id(run_id)
+        if run is None:
+            raise Exception(f"Run with ID {run_id} not found in supervision config.")
+        
+        supervision_context = run.supervision_context
+        supervision_context.add_supervised_function(
+            function_name=tool_api.name,
+            supervision_functions=supervision_functions,
+            ignored_attributes=ignored_attributes,
+            function=tool,
+            tool_id=tool_api.id
+        )
+        
         logging.info(
             f"Registered tool '{tool_api.name}' with ID {tool_api.id} and {len(supervisor_chain_ids)} supervisor chains."
         )
@@ -93,8 +109,3 @@ def asteroid_end(run_id: UUID) -> None:
     Stops supervision for a run.
     """
     submit_run_status(run_id, Status.COMPLETED)
-
-def check_config_validity(execution_settings):
-    if (execution_settings.get("execution_mode") == ExecutionMode.MONITORING
-            and execution_settings.get("rejection_policy") == RejectionPolicy.RESAMPLE_WITH_FEEDBACK):
-        raise ValueError("Monitoring mode does not support resample_with_feedback rejection policy")
