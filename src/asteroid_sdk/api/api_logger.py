@@ -94,6 +94,7 @@ class APILogger:
         """
         # Convert response_data to a JSON string
         # TODO - Confirm I can remove the bit that I've removed. We were already converting to a dict above
+        # TODO - David note - The reason for this is that sometimes the main object was dict but contained other objects that were not dicts, that's why the below code was needed - It might be redundant but would need to be tested
 
         # response_data = response if isinstance(response, dict) else response.to_dict()
         # if hasattr(response_data, 'model_dump_json'):

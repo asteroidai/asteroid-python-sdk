@@ -90,6 +90,8 @@ class SupervisionContext:
                 return self._describe_openai_messages()
             elif self.anthropic_messages:
                 return self._describe_anthropic_messages()
+            elif self.gemini_messages:
+                return self._describe_gemini_messages()
 
         logging.warning("No messages to convert to text")
         return ""
@@ -145,6 +147,17 @@ class SupervisionContext:
 
         return "\n\n".join(messages_text)
 
+
+    def _describe_gemini_messages(self) -> str:
+        """Converts the gemini_messages into a textual description."""
+        messages_text = []
+        for message in self.gemini_messages:
+            for part in message.parts:
+                messages_text.append(f"**{message.role}:**\n{part.text}")
+                if part.function_call:
+                    params = {arg: value for arg, value in part.function_call.args.items()}
+                    messages_text.append(f"**Tool Use:**\n{part.function_call.name}\n**Arguments:** {json.dumps(params, indent=2)}")
+        return "\n\n".join(messages_text)
 
     # Methods to manage the supervised functions registry
     def add_supervised_function(
