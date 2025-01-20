@@ -671,7 +671,6 @@ def get_human_supervision_decision_api(
     elif supervision_status == 'timeout':
         return SupervisionDecision(decision=SupervisionDecisionType.ESCALATE,
                                    explanation="Timeout waiting for human supervisor decision.")
-                                   explanation="Timeout waiting for human supervisor decision.")
     elif supervision_status == 'pending':
         return SupervisionDecision(decision=SupervisionDecisionType.ESCALATE,
                                    explanation="The human supervisor has not yet provided a decision.")
