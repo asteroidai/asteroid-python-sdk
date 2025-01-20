@@ -43,7 +43,6 @@ class AsteroidChatSupervisionManager:
 
 
     async def log_request(self, request_data: Dict[str, Any], run_id: UUID) -> None:
-    async def log_request(self, request_data: Dict[str, Any], run_id: UUID) -> None:
         """
         Log the request data. Currently a no-op as the Asteroid API doesn't require request data
         to be sent separately; it is sent along with the response in `log_response`.
@@ -53,7 +52,6 @@ class AsteroidChatSupervisionManager:
         """
         pass  # No action required.
 
-    async def handle_language_model_interaction(
     async def handle_language_model_interaction(
             self,
             response: ChatCompletion|Message, # TODO - Change this to use a generic maybe
@@ -111,7 +109,6 @@ class AsteroidChatSupervisionManager:
         choice_ids = create_new_chat_response.choice_ids
 
         # Extract execution settings from the supervision configuration
-        new_response = await self.supervision_runner.handle_tool_calls_from_llm_response(
         new_response = await self.supervision_runner.handle_tool_calls_from_llm_response(
             args=args,
             choice_ids=choice_ids,
