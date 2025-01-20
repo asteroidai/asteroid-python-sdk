@@ -136,11 +136,13 @@ class SupervisionRunner:
                 else:
                     decisions.append({'tool_call': tool_call, 'supervisor_decisions': supervisor_decisions})
 
-        # This is truly horrible
-        for supervisor_decisions in decisions:
-            for tool_call_decisions in supervisor_decisions.get('supervisor_decisions'):
-                for supervisor_decision in tool_call_decisions:
-                    if supervisor_decision.decision in [SupervisionDecisionType.REJECT, SupervisionDecisionType.ESCALATE,
+        # Tom's comment: This is truly horrible
+        # David's comment: Agreed, I assume the goal was to save the rejection result, but we also need to return it
+        if multi_supervisor_resolution == MultiSupervisorResolution.ALL_MUST_APPROVE:
+            for supervisor_decisions in decisions:
+                for tool_call_decisions in supervisor_decisions.get('supervisor_decisions'):
+                    # We only check the last decision in the chain as that's the one that will be used
+                    if tool_call_decisions[-1].decision in [SupervisionDecisionType.REJECT, SupervisionDecisionType.ESCALATE,
                                                 SupervisionDecisionType.TERMINATE]:
                         rejection_result = self._create_rejection_result(decisions)
                         # Log the interaction
@@ -149,6 +151,11 @@ class SupervisionRunner:
                             request_kwargs,
                             run_id
                         )
+                        # We need to return the rejection result
+                        new_response = rejection_result
+                        break
+        else:
+            raise ValueError("Multi supervisor resolution must be all_must_approve")
 
         return new_response
 

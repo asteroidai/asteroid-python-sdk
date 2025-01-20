@@ -40,8 +40,6 @@ class APILogger:
             run_id: UUID,
     ) -> ChatIds:
 
-        # self._debug_print_raw_input(response_data, request_kwargs)
-        response_data_str, request_data_str = self._convert_to_json(response_data, request_kwargs)
         response_data_str, request_data_str = self._convert_to_json(response, request_kwargs)
         response_data_base64, request_data_base64 = self._encode_to_base64(response_data_str, request_data_str)
 
@@ -88,7 +86,7 @@ class APILogger:
         """
         Convert the response and request data to JSON strings.
 
-        :param response_data: The response data to convert.
+        :param response: The response data to convert.
         :param request_kwargs: The request keyword arguments to convert.
         :return: A tuple containing the response and request data as JSON strings.
         """
