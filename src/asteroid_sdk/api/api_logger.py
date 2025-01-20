@@ -56,14 +56,11 @@ class APILogger:
         :return: The parsed response from the API.
         """
         try:
-            logging.info(f"Sending request to Asteroid API with body: {body}")
             response = create_new_chat_sync_detailed(
                 client=self.client,
                 run_id=run_id,
                 body=body
             )
-            logging.info(f"API Response status code: {response.status_code}")
-            logging.debug(f"API Response content: {response.content}")
 
             if response.status_code not in [200, 201]:
                 raise ValueError(
