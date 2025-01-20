@@ -70,7 +70,6 @@ class APILogger:
                 raise ValueError("Response was successful but parsed content is None")
 
             logging.info(f"Successfully logged response for run {run_id}")
-            logging.debug(f"Parsed response: {response.parsed}")
             return response.parsed
         except Exception as e:
             logging.error(f"API request error: {str(e)}")

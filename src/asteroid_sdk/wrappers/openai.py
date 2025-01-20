@@ -70,7 +70,6 @@ class CompletionsWrapper:
                     message_supervisors=message_supervisors
                 )
                 if new_response is not None:
-                    print(f"New response: {new_response}")
                     return new_response
             except Exception as e:
                 print(f"Warning: Failed to log response: {str(e)}")
