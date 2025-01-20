@@ -82,20 +82,6 @@ class APILogger:
             logging.error(f"Error occurred at line {e.__traceback__.tb_lineno}")
             raise
 
-    def _debug_print_raw_input(
-            self, response_data: Dict[str, Any], request_kwargs: Dict[str, Any]
-    ) -> None:
-        """
-        Print raw response and request data for debugging purposes.
-
-        :param response_data: The raw response data from the API.
-        :param request_kwargs: The request keyword arguments.
-        """
-        logging.debug(f"Raw response_data type: {type(response_data)}")
-        logging.debug(f"Raw response_data: {response_data}")
-        logging.debug(f"Raw request_data type: {type(request_kwargs)}")
-        logging.debug(f"Raw request_data: {request_kwargs}")
-
     def _convert_to_json(
             self, response: Any, request_kwargs: Any
     ) -> tuple[str, str]:
