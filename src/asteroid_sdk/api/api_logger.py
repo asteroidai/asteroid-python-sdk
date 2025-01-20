@@ -35,7 +35,7 @@ class APILogger:
     ) -> ChatIds:
         response_data = response if isinstance(response, dict) else response.to_dict()
 
-        self._debug_print_raw_input(response_data, request_kwargs)
+        # self._debug_print_raw_input(response_data, request_kwargs)
         response_data_str, request_data_str = self._convert_to_json(response_data, request_kwargs)
         response_data_base64, request_data_base64 = self._encode_to_base64(response_data_str, request_data_str)
 
