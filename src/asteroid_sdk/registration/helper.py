@@ -23,6 +23,7 @@ from asteroid_sdk.api.generated.asteroid_api_client.api.project.create_project i
 from asteroid_sdk.api.generated.asteroid_api_client.api.task.create_task import sync_detailed as create_task_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.tool.create_run_tool import sync_detailed as create_run_tool_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.tool_call.get_tool_call_history import sync_detailed as get_tool_call_history_sync_detailed
+from asteroid_sdk.api.generated.asteroid_api_client.api.tool_call.get_tool_call_history import sync_detailed as get_tool_call_history_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.create_run import sync_detailed as create_run_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.supervisor.create_supervisor import sync_detailed as create_supervisor_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.supervisor.create_tool_supervisor_chains import sync_detailed as create_tool_supervisor_chains_sync_detailed
@@ -683,6 +684,21 @@ def map_result_to_decision(result: SupervisionResult) -> SupervisionDecision:
     decision_type = decision_map.get(result.decision.value.lower(), SupervisionDecisionType.ESCALATE)
     modified_output = None
     if decision_type == SupervisionDecisionType.MODIFY:  
+        client = APIClientFactory.get_client()
+        try:
+            assert result.toolcall_id is not UNSET
+            tool_call_history = get_tool_call_history_sync_detailed(tool_call_id=result.toolcall_id, client=client)
+            if tool_call_history.status_code == 200 and tool_call_history.parsed is not None:
+                tool_call_history = tool_call_history.parsed
+                tool_name = tool_call_history[-1].name
+                kwargs = json.loads(tool_call_history[-1].arguments)
+                modified_output = ModifiedData(
+                    tool_name=tool_name,
+                    tool_kwargs=kwargs,
+                )
+        except Exception as e:
+            logging.error(f"Error getting tool call history: {e}")
+        
         client = APIClientFactory.get_client()
         try:
             assert result.toolcall_id is not UNSET

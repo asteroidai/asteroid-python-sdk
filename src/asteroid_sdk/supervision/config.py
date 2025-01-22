@@ -11,6 +11,8 @@ from anthropic.types import Message, TextBlock, ToolUseBlock
 from pydantic import BaseModel, Field
 import logging
 
+from asteroid_sdk.supervision.helpers.model_provider_helper import Provider
+
 DEFAULT_RUN_NAME = "default"
 
 class SupervisionDecisionType(str, Enum):
@@ -71,6 +73,7 @@ class SupervisionContext:
         self.metadata: Dict[str, Any] = {}
         self.openai_messages: List[Dict[str, Any]] = []
         self.anthropic_messages: List[Dict[str, Any]] = []
+        self.gemini_messages: List[Dict[str, Any]] = []
         self.supervised_functions_registry: Dict[str, Dict[str, Any]] = pending_functions or {}
         self.registered_supervisors: Dict[str, UUID] = {}
         self.local_supervisors_by_id: Dict[UUID, Callable] = {}
@@ -87,6 +90,8 @@ class SupervisionContext:
                 return self._describe_openai_messages()
             elif self.anthropic_messages:
                 return self._describe_anthropic_messages()
+            elif self.gemini_messages:
+                return self._describe_gemini_messages()
 
         logging.warning("No messages to convert to text")
         return ""
@@ -96,7 +101,18 @@ class SupervisionContext:
         messages_text = []
         for message in self.openai_messages:
             role = message.get('role', 'Unknown').capitalize()
-            content = message.get('content', '').strip()
+            content = message.get('content', '')
+            if type(content) == str:
+                content = content.strip()
+            elif type(content) == list:
+                # TODO: Solve this - it happens when there is an image
+                content = ''
+                for m in content:
+                    if m.type == 'text':
+                        content += m.text
+                    elif m.type == 'image_url':
+                        content += f'Image' #{m.image_url}' #TODO: Add the image somehow
+                
             message_str = f"**{role}:**\n{content}" if content else f"**{role}:**"
 
             # Handle tool calls if present
@@ -142,6 +158,17 @@ class SupervisionContext:
 
         return "\n\n".join(messages_text)
 
+
+    def _describe_gemini_messages(self) -> str:
+        """Converts the gemini_messages into a textual description."""
+        messages_text = []
+        for message in self.gemini_messages:
+            for part in message.parts:
+                messages_text.append(f"**{message.role}:**\n{part.text}")
+                if part.function_call:
+                    params = {arg: value for arg, value in part.function_call.args.items()}
+                    messages_text.append(f"**Tool Use:**\n{part.function_call.name}\n**Arguments:** {json.dumps(params, indent=2)}")
+        return "\n\n".join(messages_text)
 
     # Methods to manage the supervised functions registry
     def add_supervised_function(
@@ -208,7 +235,7 @@ class SupervisionContext:
         with self.lock:
             return self.registered_supervisors.get(supervisor_name)
 
-    def update_messages(self, messages: List[Dict[str, Any]], anthropic: bool = False, system_message: Optional[str] = None):
+    def update_messages(self, messages: List[Dict[str, Any]], provider: Provider, system_message: Optional[str] = None):
         """Updates the context with a list of OpenAI messages."""
         if system_message:
             # Anthropic stores the system message outside of the messages list
@@ -217,10 +244,12 @@ class SupervisionContext:
             final_messages = messages.copy()
 
         with self.lock:
-            if anthropic:
-                self.anthropic_messages = final_messages
-            else:
-                self.openai_messages = final_messages
+            if provider == Provider.ANTHROPIC:
+                self.anthropic_messages = final_messages['messages']
+            elif provider == Provider.OPENAI:
+                self.openai_messages = final_messages['messages']
+            elif provider == Provider.GEMINI:
+                self.gemini_messages = final_messages['contents']
 
     def add_local_supervisor(self, supervisor_id: UUID, supervisor_func: Callable):
         """Add a supervisor function to the config."""

@@ -10,6 +10,7 @@ from openai.types.chat.chat_completion_message_tool_call import Function
 
 from asteroid_sdk.api.generated.asteroid_api_client.models import ChatFormat
 from asteroid_sdk.registration.helper import MESSAGE_TOOL_NAME
+from asteroid_sdk.supervision.helpers.model_provider_helper import Provider
 from asteroid_sdk.supervision.model.tool_call import ToolCall
 
 
@@ -91,5 +92,27 @@ class OpenAiSupervisionHelper:
         )
 
 
-    def get_message_format(self) -> ChatFormat:
-        return ChatFormat.OPENAI
+    def get_provider(self) -> Provider:
+        return Provider.OPENAI
+
+    # TODO - Clean this up, just copied the method from main code
+    def convert_model_kwargs_to_json(self, request_kwargs: ChatCompletion) -> str:
+        messages = request_kwargs.get("messages", [])
+        for idx, message in enumerate(messages):
+            if isinstance(message, ChatCompletionMessage):
+                request_kwargs['messages'][idx] = message.to_dict()
+            else:
+                tool_calls = message.get("tool_calls", [])
+                if tool_calls:
+                    request_kwargs["messages"][idx]["tool_calls"] = [
+                        t.to_dict() if hasattr(t, 'to_dict') else t for t in tool_calls
+                    ]
+        return json.dumps(request_kwargs)
+
+    def resample_response(self, feedback_message, args, request_kwargs, completions):
+        copied_kwargs = copy.deepcopy(request_kwargs)
+        copied_kwargs['messages'].append({
+            "role": "user",
+            "content": feedback_message
+        })
+        return completions.create(*args, **copied_kwargs), copied_kwargs

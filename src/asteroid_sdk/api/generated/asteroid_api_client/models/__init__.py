@@ -40,8 +40,7 @@ from .review_payload import ReviewPayload
 from .revoke_api_key_body import RevokeAPIKeyBody
 from .run import Run
 from .run_execution import RunExecution
-from .run_playback import RunPlayback
-from .segment import Segment
+from .run_metadata import RunMetadata
 from .status import Status
 from .supervision_request import SupervisionRequest
 from .supervision_request_state import SupervisionRequestState
@@ -58,6 +57,7 @@ from .tool import Tool
 from .tool_attributes import ToolAttributes
 from .tool_call_ids import ToolCallIds
 from .tool_supervision_result import ToolSupervisionResult
+from .update_run_metadata_body import UpdateRunMetadataBody
 from .update_run_result_body import UpdateRunResultBody
 
 __all__ = (
@@ -101,8 +101,7 @@ __all__ = (
     "RevokeAPIKeyBody",
     "Run",
     "RunExecution",
-    "RunPlayback",
-    "Segment",
+    "RunMetadata",
     "Status",
     "SupervisionRequest",
     "SupervisionRequestState",
@@ -119,5 +118,6 @@ __all__ = (
     "ToolAttributes",
     "ToolCallIds",
     "ToolSupervisionResult",
+    "UpdateRunMetadataBody",
     "UpdateRunResultBody",
 )

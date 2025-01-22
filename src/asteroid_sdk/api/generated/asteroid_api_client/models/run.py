@@ -1,5 +1,5 @@
 import datetime
-from typing import Any, Dict, List, Type, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Type, TypeVar, Union
 from uuid import UUID
 
 from attrs import define as _attrs_define
@@ -8,6 +8,10 @@ from dateutil.parser import isoparse
 
 from ..models.status import Status
 from ..types import UNSET, Unset
+
+if TYPE_CHECKING:
+    from ..models.run_metadata import RunMetadata
+
 
 T = TypeVar("T", bound="Run")
 
@@ -21,6 +25,7 @@ class Run:
         created_at (datetime.datetime):
         status (Union[Unset, Status]):
         result (Union[Unset, str]):
+        metadata (Union[Unset, RunMetadata]):
     """
 
     id: UUID
@@ -28,6 +33,7 @@ class Run:
     created_at: datetime.datetime
     status: Union[Unset, Status] = UNSET
     result: Union[Unset, str] = UNSET
+    metadata: Union[Unset, "RunMetadata"] = UNSET
     additional_properties: Dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -43,6 +49,10 @@ class Run:
 
         result = self.result
 
+        metadata: Union[Unset, Dict[str, Any]] = UNSET
+        if not isinstance(self.metadata, Unset):
+            metadata = self.metadata.to_dict()
+
         field_dict: Dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -56,11 +66,15 @@ class Run:
             field_dict["status"] = status
         if result is not UNSET:
             field_dict["result"] = result
+        if metadata is not UNSET:
+            field_dict["metadata"] = metadata
 
         return field_dict
 
     @classmethod
     def from_dict(cls: Type[T], src_dict: Dict[str, Any]) -> T:
+        from ..models.run_metadata import RunMetadata
+
         d = src_dict.copy()
         id = UUID(d.pop("id"))
 
@@ -77,12 +91,20 @@ class Run:
 
         result = d.pop("result", UNSET)
 
+        _metadata = d.pop("metadata", UNSET)
+        metadata: Union[Unset, RunMetadata]
+        if isinstance(_metadata, Unset):
+            metadata = UNSET
+        else:
+            metadata = RunMetadata.from_dict(_metadata)
+
         run = cls(
             id=id,
             task_id=task_id,
             created_at=created_at,
             status=status,
             result=result,
+            metadata=metadata,
         )
 
         run.additional_properties = d

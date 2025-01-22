@@ -68,14 +68,15 @@ class SupervisionRunner:
         multi_supervisor_resolution = supervision_config.execution_settings.get('multi_supervisor_resolution', 'all_must_approve')
 
         new_response = copy.deepcopy(response)
-        # !IMPORTANT! - We're only accepting 1 tool_call ATM. There's code that is called within this
-        # this loop that assumes this.
+        # TODO - Check if this is still relevant
+        #  We do not allow multiple tool calls with resampling, it should work without. Tested with Gemini and nothing else
+        decisions: List[Dict] = []
         for idx, tool_call in enumerate(response_data_tool_calls):
             tool_id = UUID(choice_ids[0].tool_call_ids[idx].tool_id)
             tool_call_id = UUID(choice_ids[0].tool_call_ids[idx].tool_call_id)
 
             # Process the tool call with supervision
-            processed_tool_call, all_decisions, modified = await self.process_tool_call(
+            processed_tool_call, supervisor_decisions, modified = await self.process_tool_call(
                 tool_call=tool_call,
                 tool_id=tool_id,
                 tool_call_id=tool_call_id,
@@ -91,10 +92,11 @@ class SupervisionRunner:
                     response=new_response,
                     tool_call=processed_tool_call.language_model_tool_call
                 )
+                decisions.append({'tool_call': tool_call, 'supervisor_decisions': supervisor_decisions})
 
             if modified and processed_tool_call:
                 # If the tool call was modified, run the supervision process again without modifications allowed
-                final_tool_call, all_decisions, modified = await self.process_tool_call(
+                final_tool_call, supervisor_decisions, modified = await self.process_tool_call(
                     tool_call=processed_tool_call,
                     tool_id=tool_id,
                     tool_call_id=tool_call_id,
@@ -107,13 +109,17 @@ class SupervisionRunner:
                     response=new_response,
                     tool_call=final_tool_call.language_model_tool_call
                 )
+                decisions.append({'tool_call': tool_call, 'supervisor_decisions': supervisor_decisions})
             elif not processed_tool_call:
                 # If the tool call was rejected, handle based on the rejection policy
+                # NOTE - this does not work currently for multiple tool calls. We're only accepting one tool call for
+                #  OpenAI/Anthropic. We accept multiple (as we can't lock it down) for Gemini, but we'll never hit this
+                #  code with Gemini. When we allow resampling on Gemini, we need to think about this
                 if rejection_policy == RejectionPolicy.RESAMPLE_WITH_FEEDBACK:
                     # Attempt to resample the response with feedback
                     resampled_response = await self.handle_rejection_with_resampling(
                         failed_tool_call=tool_call,
-                        failed_all_decisions=all_decisions,
+                        failed_all_decisions=supervisor_decisions,
                         completions=completions,
                         request_kwargs=request_kwargs,
                         args=args,
@@ -127,10 +133,54 @@ class SupervisionRunner:
                     # If resampled response contains tool calls (ie it succeeded), then succeed
                     new_response = resampled_response
                 else:
-                    # Handle other rejection policies if necessary
-                    pass
+                    decisions.append({'tool_call': tool_call, 'supervisor_decisions': supervisor_decisions})
+
+        # Tom's comment: This is truly horrible
+        # David's comment: Agreed, I assume the goal was to save the rejection result, but we also need to return it
+        if multi_supervisor_resolution == MultiSupervisorResolution.ALL_MUST_APPROVE:
+            for supervisor_decisions in decisions:
+                for tool_call_decisions in supervisor_decisions.get('supervisor_decisions'):
+                    # We only check the last decision in the chain as that's the one that will be used
+                    if tool_call_decisions[-1].decision in [SupervisionDecisionType.REJECT, SupervisionDecisionType.ESCALATE,
+                                                SupervisionDecisionType.TERMINATE]:
+                        rejection_result = self._create_rejection_result(decisions)
+                        # Log the interaction
+                        self.api_logger.log_llm_interaction(
+                            rejection_result,
+                            request_kwargs,
+                            run_id
+                        )
+                        # We need to return the rejection result
+                        new_response = rejection_result
+                        break
+        else:
+            raise ValueError("Multi supervisor resolution must be all_must_approve")
 
         return new_response
+
+
+    def _create_rejection_result(self, all_call_decisions):
+        result_info = []
+
+        for decision in all_call_decisions:
+            feedback_from_supervisors = " ".join([
+                f"Chain {chain_number}: Supervisor {supervisor_number_in_chain}: Decision: {decision.decision}, Explanation: {decision.explanation} \n"
+                for chain_number, decisions_for_chain in enumerate(decision.get('supervisor_decisions'))
+                for supervisor_number_in_chain, decision in enumerate(decisions_for_chain)
+            ])
+            tool_result_info = {
+                "name": decision['tool_call'].tool_name,
+                "params": decision['tool_call'].tool_params,
+                "explanations": feedback_from_supervisors
+            }
+            result_info.append(tool_result_info)
+
+        # Load and render the feedback message template
+        feedback_template_content = load_template('partial_rejection_message_template.jinja')
+        feedback_template = jinja2.Template(feedback_template_content)
+        feedback_message = feedback_template.render(tools=result_info)
+
+        return self.model_provider_helper.generate_new_response_with_rejection_message(feedback_message)
 
     def resampled_response_successful(self, resampled_response):
         return resampled_response and resampled_response.tool_calls
@@ -399,29 +449,20 @@ class SupervisionRunner:
         :param message_supervisors: The message supervisors to use for supervision.
         :return: A new ChatCompletionMessage if successful, else None.
         """
-        updated_messages = copy.deepcopy(request_kwargs["messages"])
-
         # Load the resample prompt template
         resample_prompt_template = load_template('resample_prompt.jinja')
         resample_prompt_content = jinja2.Template(resample_prompt_template).render()
 
         for resample in range(n_resamples):
-            # Add feedback to the context based on the latest failed tool call and decisions
             feedback_message = self._get_feedback_message(failed_all_decisions, failed_tool_call)
 
-            updated_messages.append({
-                "role": "user",
-                "content": feedback_message
-            })
+            resampled_response, resampled_request_kwargs = self.model_provider_helper.resample_response(
+                feedback_message,
+                args,
+                request_kwargs,
+                completions # Maybe we should inject the client straight into the ModelProviderHelper, instead of passing through here
+            )
 
-            resampled_request_kwargs = copy.deepcopy(request_kwargs)
-            resampled_request_kwargs["messages"] = updated_messages
-
-            # Send the updated messages to the model for resampling
-            # TODO - this is still coupled to providers, it just so happens that 'create' is the method name used
-            #  by both anthropic and OpenAI. I suggest maybe we either pass a callable if we need this- or move the
-            #  resampling to the `ModelProviderHelper` protocol
-            resampled_response = completions.create(*args, **resampled_request_kwargs)
             resampled_tool_calls = self.model_provider_helper.get_tool_call_from_response(resampled_response)
 
             if not resampled_tool_calls:
@@ -471,6 +512,8 @@ class SupervisionRunner:
         # Summarize all feedback into one message to send back
 
         # Build the explanations variable
+        # NOTE - Below will fail with n-resamples set to 0, but probably would do this anyway
+        updated_messages = resampled_request_kwargs['messages']
         explanations = "\n".join([
             f"Resample {idx+1}: {message['content']}"
             for idx, message in enumerate(updated_messages[-n_resamples:])

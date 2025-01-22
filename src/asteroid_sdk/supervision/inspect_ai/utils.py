@@ -26,6 +26,11 @@ from anthropic.types.text_block import TextBlock
 from anthropic.types.tool_use_block import ToolUseBlock
 from anthropic.types.usage import Usage
 
+from google.ai.generativelanguage_v1beta import FunctionCall, Content, Part, Candidate, GenerateContentResponse as BetaContent
+from google.generativeai.types import GenerateContentResponse
+
+from asteroid_sdk.supervision.config import SupervisionDecision
+
 from asteroid_sdk.supervision.config import SupervisionDecision
 
 
@@ -66,6 +71,9 @@ def convert_state_messages_to_openai_messages(state_messages: List[ChatMessage])
     for msg in state_messages:
         role = msg.role  # 'system', 'user', 'assistant', etc.
         content = msg.text  # Extract the text content from the message
+
+        if hasattr(msg, 'error') and msg.error is not None:
+            content = f"{content}\n\nError: {msg.error.message}"
 
         openai_msg = {
             "role": role,
@@ -169,6 +177,9 @@ def convert_state_messages_to_anthropic_messages(state_messages: List[ChatMessag
                 'text': msg.text
             }
             content_blocks.append(text_block)
+
+        if hasattr(msg, 'error') and msg.error is not None:
+            content_blocks.append({'type': 'text', 'text': f"Error: {msg.error.message}"})
 
         # Include tool calls as ToolUseBlocks
         if hasattr(msg, 'tool_calls') and msg.tool_calls:
@@ -276,3 +287,78 @@ def transform_asteroid_approval_to_inspect_ai_approval(approval_decision: Superv
         modified=modified,
         explanation=approval_decision.explanation
     )
+
+def convert_state_messages_to_gemini_messages(state_messages: List[ChatMessage]) -> List[Dict]:
+    """
+    Convert Inspect AI state messages to a list of dictionaries compatible with Gemini's API.
+
+    Args:
+        state_messages (List[ChatMessage]): List of Inspect AI chat messages.
+
+    Returns:
+        List[Dict]: List of messages formatted for Gemini API.
+    """
+    gemini_messages = []
+    for msg in state_messages:
+        content = {
+            'role': msg.role,  # 'system', 'user', 'assistant'
+            'parts': []
+        }
+
+        parts = []
+        if msg.text:
+            parts.append({'text': msg.text})
+
+        # Include tool calls as appropriate
+        if hasattr(msg, 'tool_calls') and msg.tool_calls:
+            for tool_call in msg.tool_calls:
+                function_call = {
+                    'function_call': {
+                        'name': tool_call.function,
+                        'args': tool_call.arguments
+                    }
+                }
+                parts.append(function_call)
+                
+        if hasattr(msg, 'error') and msg.error is not None:
+            parts.append({'text': f"Error: {msg.error.message}"})
+
+        content['parts'] = parts
+        gemini_messages.append(content)
+
+    return gemini_messages
+
+def convert_state_output_to_gemini_response(state_output) -> GenerateContentResponse:
+    """
+    Convert Inspect AI state output to a Gemini GenerateContentResponse instance.
+
+    Args:
+        state_output (ModelOutput): The output from Inspect AI model.
+
+    Returns:
+        GenerateContentResponse: An instance representing the response as per Gemini's API.
+    """
+    # Assume state_output.choices is a list of choices; we'll use the first choice
+    choice = state_output.choices[0]
+    message = choice.message  # Should be ChatMessageAssistant
+
+    parts = []
+    if message.text:
+        parts.append(Part(text=message.text))
+
+    # Include function calls as appropriate
+    if hasattr(message, 'tool_calls') and message.tool_calls:
+        for tool_call in message.tool_calls:
+            function_call = FunctionCall(
+                name=tool_call.function,
+                args=tool_call.arguments
+            )
+            parts.append(Part(function_call=function_call))
+
+    content = Content(parts=parts, role=message.role)
+    candidate = Candidate(content=content)
+    
+    beta_response = BetaContent(candidates=[candidate])
+    
+    response = GenerateContentResponse.from_response(beta_response)
+    return response

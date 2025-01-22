@@ -1,8 +1,13 @@
 from typing import Optional, Union, List, Dict, Any, Callable, Tuple, Type
 from uuid import UUID
 
+from google.ai.generativelanguage_v1beta import ToolConfig, FunctionCallingConfig
+from google.generativeai.types.content_types import ToolConfigType, Mode
+
 from asteroid_sdk.api.generated.asteroid_api_client.models.tool import Tool
 from asteroid_sdk.registration.helper import get_human_supervision_decision_api
+from google.generativeai.types import GenerateContentResponse
+
 from .config import (
     SupervisionDecision,
     SupervisionDecisionType,
@@ -19,11 +24,13 @@ from asteroid_sdk.utils.utils import load_template
 from jsonschema import validate, ValidationError, SchemaError
 from pydantic import BaseModel
 import anthropic
+import google.generativeai as genai
 import os
 import asyncio
 
 DEFAULT_OPENAI_LLM_MODEL = "gpt-4o"
 DEFAULT_ANTHROPIC_LLM_MODEL = "claude-3-5-sonnet-latest"
+DEFAULT_GEMINI_LLM_MODEL = "gemini-1.5-flash"
 
 # DEFAULT PROMPTS
 LLM_SUPERVISOR_SYSTEM_PROMPT_TEMPLATE = load_template("default_llm_supervisor_system_template.jinja")
@@ -48,6 +55,9 @@ def preprocess_message(
         "tool_call_arguments": None,
     }
 
+    # TODO - this forces us back to one tool call again. I think this bit is the reason that we want to pass around a
+    #  ToolCall object, instead of the raw message. We can pass the user/supervisor the raw message if we want,
+    #  but we're just back to decoding again here
     if isinstance(message, ChatCompletionMessage):
         # OpenAI message handling
         if message.tool_calls:
@@ -74,6 +84,20 @@ def preprocess_message(
             preprocessed["message_content"] = ''.join(
                 block.text for block in message.content if block.type == "text"
             )
+    elif isinstance(message, GenerateContentResponse):
+        # Gemini message handling
+        # TODO - ensure that this is actually doing the correct thing
+        tool_call_found = False
+        if message.parts:
+            for part in message.parts:
+                if part.function_call:
+                    tool_call_found = True
+                    tool_call = message.parts[0]
+                    preprocessed["tool_call_name"] = tool_call.function_call.name
+                    preprocessed["tool_call_description"] = getattr(tool_call.function_call, 'description', "")
+                    preprocessed["tool_call_arguments"] = {arg: value for arg, value in tool_call.function_call.args.items()}
+        if tool_call_found == False:
+            preprocessed["message_content"] = message.choices[0].message.content
     else:
         raise ValueError("Unsupported message type")
 
@@ -114,12 +138,14 @@ def llm_supervisor(
         model = DEFAULT_OPENAI_LLM_MODEL
     if provider == "anthropic" and model == DEFAULT_OPENAI_LLM_MODEL:
         model = DEFAULT_ANTHROPIC_LLM_MODEL
+    if provider == "gemini" and model == DEFAULT_OPENAI_LLM_MODEL:
+        model = DEFAULT_GEMINI_LLM_MODEL
     if not system_prompt_template:
         system_prompt_template = LLM_SUPERVISOR_SYSTEM_PROMPT_TEMPLATE
     if not assistant_prompt_template:
         assistant_prompt_template = LLM_SUPERVISOR_ASSISTANT_PROMPT_TEMPLATE
-        
-        
+
+
 
     # Compile the Jinja templates
     compiled_system_prompt_template = jinja2.Template(system_prompt_template)
@@ -178,9 +204,9 @@ def llm_supervisor(
 
         # Prepare messages and function/tool definitions based on the provider
         if provider == "openai":
-            
+
             openai_client = OpenAI()
-            
+
             messages = [
                 {"role": "system", "content": system_prompt.strip()},
                 {"role": "user", "content": assistant_prompt.strip()},
@@ -298,6 +324,63 @@ def llm_supervisor(
                     explanation=f"Error during LLM supervision: {str(e)}",
                     modified=None,
                 )
+
+        elif provider == "gemini":
+            # NOTE- System role is added when client it generated
+            contents = [
+                {"role": "user", 'parts': [{"text": assistant_prompt.strip()}]}
+            ]
+            # Got to manually define the below as the API is so strict that the`.model_json_schema()` method won't work
+            supervision_decision_schema = genai.protos.Schema(
+                type=genai.protos.Type.OBJECT,
+                properties={
+                    'decision': genai.protos.Schema(type=genai.protos.Type.STRING, enum=SupervisionDecisionType),
+                    'explanation': genai.protos.Schema(type=genai.protos.Type.STRING),
+                },
+            )
+
+            functions = [
+                {
+                    "name": "supervision_decision",
+                    "description": (
+                        "Analyze the input based on the provided instructions and context, and make a "
+                        "supervision decision: APPROVE, REJECT, ESCALATE, TERMINATE, or MODIFY. Provide a "
+                        "concise and accurate explanation for your decision. If you modify the input, include "
+                        "the modified content in the 'modified' field."
+                    ),
+                    "parameters": supervision_decision_schema,
+                }
+            ]
+
+            genai.configure()
+            gemini_model = genai.GenerativeModel(
+                model,
+                system_instruction=assistant_prompt.strip(),
+                tool_config={"function_calling_config": {
+                    "mode": "ANY",
+                    "allowed_function_names": ["supervision_decision"],
+                }},
+            )
+
+            result = gemini_model.generate_content(
+                contents=contents,
+                tools=functions
+            )
+
+            # Extract the function call arguments from the response
+            for part in result.parts:
+                if part.function_call:
+                    params = {arg: value for arg, value in part.function_call.args.items()}
+                    break
+
+            # TODO- Note modified does not work yet!
+            decision = SupervisionDecision(
+                decision=params.get("decision").lower(),
+                modified=None,
+                explanation=params.get("explanation"),
+            )
+            return decision
+
 
         else:
             raise ValueError(f"Unsupported provider: {provider}")

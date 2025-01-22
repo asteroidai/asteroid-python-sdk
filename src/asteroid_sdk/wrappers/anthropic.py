@@ -4,9 +4,12 @@ Wrapper for the Anthropic client to intercept requests and responses.
 
 import asyncio
 import threading
+import traceback
+import time
 from typing import Any, Callable, List, Optional
 from uuid import UUID
 import logging
+import atexit
 
 from anthropic import Anthropic, AnthropicError
 
@@ -17,96 +20,170 @@ from asteroid_sdk.api.supervision_runner import SupervisionRunner
 from asteroid_sdk.settings import settings
 from asteroid_sdk.supervision.config import ExecutionMode
 from asteroid_sdk.supervision.helpers.anthropic_helper import AnthropicSupervisionHelper
-import traceback
+
+# Create a background event loop
+background_loop = asyncio.new_event_loop()
+tasks = set()
+loop_running = True  # Flag to keep the loop running
+
+def start_background_loop(loop: asyncio.AbstractEventLoop):
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_forever()
+    finally:
+        pending = asyncio.all_tasks(loop)
+        if pending:
+            # Wait for pending tasks to complete
+            loop.run_until_complete(asyncio.gather(*pending))
+        loop.close()
+
+# Start the background loop in a new thread
+background_thread = threading.Thread(target=start_background_loop, args=(background_loop,), daemon=True)
+background_thread.start()
+
+def schedule_task(coro):
+    if not loop_running:
+        logging.warning("Attempted to schedule task after shutdown initiated")
+        return
+    future = asyncio.run_coroutine_threadsafe(coro, background_loop)
+    tasks.add(future)
+    future.add_done_callback(task_done)
+    return future
+
+def task_done(fut):
+    tasks.discard(fut)
+    try:
+        fut.result()
+    except Exception as e:
+        logging.error(f"Background task failed: {e}")
+        traceback.print_exc()
+
+def shutdown_background_loop():
+    global loop_running
+    loop_running = False  # Signal the loop to stop accepting new tasks
+    
+    # Wait for all tasks to complete with a timeout
+    wait_start = time.time()
+    while tasks and (time.time() - wait_start) < 30:  # 30 second timeout
+        time.sleep(0.1)
+        
+    if tasks:
+        logging.warning(f"{len(tasks)} tasks still pending at shutdown")
+    
+    try:
+        # Stop the loop
+        background_loop.call_soon_threadsafe(background_loop.stop)
+    except Exception as e:
+        logging.warning(f"Error stopping background loop: {e}")
+
+    # Give the thread a chance to finish cleanly
+    background_thread.join(timeout=5)
+
+# Register shutdown handler
+atexit.register(shutdown_background_loop)
 
 class CompletionsWrapper:
-    """Wraps chat completions with logging capabilities"""
+    """Wraps chat completions with logging and supervision capabilities"""
 
     def __init__(
-            self,
-            completions: Any, #TODO - Maybe make this generic also?
-            chat_supervision_manager: AsteroidChatSupervisionManager,
-            run_id: UUID,
-            execution_mode: str = "supervision"
+        self,
+        completions: Any,
+        chat_supervision_manager: AsteroidChatSupervisionManager,
+        run_id: UUID,
+        execution_mode: str = "supervision",
     ):
         self._completions = completions
         self.chat_supervision_manager = chat_supervision_manager
         self.run_id = run_id
         self.execution_mode = execution_mode
 
-    def create(self, *args, message_supervisors: Optional[List[List[Callable]]] = None, **kwargs) -> Any:
-        # If parallel tool calls are not set to false, then raise an error.
+    def create(
+        self,
+        *args,
+        message_supervisors: Optional[List[List[Callable]]] = None,
+        **kwargs,
+    ) -> Any:
+        # If parallel tool calls are not set to false, then update accordingly.
         # Parallel tool calls do not work at the moment due to conflicts when trying to 'resample'
         if kwargs.get("tool_choice", {}) and not kwargs["tool_choice"].get("disable_parallel_tool_use", False):
             logging.warning("Parallel tool calls are not supported, setting disable_parallel_tool_use=True")
             kwargs["tool_choice"]["disable_parallel_tool_use"] = True
 
         if self.execution_mode == ExecutionMode.MONITORING:
-            # Run in async mode
-            return asyncio.run(self.create_async(*args, message_supervisors=message_supervisors, **kwargs))
+            # Run in monitoring mode (asynchronous supervision)
+            return self.create_with_async_supervision(*args, message_supervisors=message_supervisors, **kwargs)
         elif self.execution_mode == ExecutionMode.SUPERVISION:
-            # Run in sync mode
+            # Run in synchronous supervision mode
             return self.create_sync(*args, message_supervisors=message_supervisors, **kwargs)
         else:
             raise ValueError(f"Invalid execution mode: {self.execution_mode}")
 
-    def create_sync(self, *args, message_supervisors: Optional[List[List[Callable]]] = None, **kwargs) -> Any:
-        # Log the entire request payload
-        try:
-            self.chat_supervision_manager.log_request(kwargs, self.run_id)
-        except AsteroidLoggingError as e:
-            print(f"Warning: Failed to log request: {str(e)}")
+    def create_with_async_supervision(
+        self,
+        *args,
+        message_supervisors: Optional[List[List[Callable]]] = None,
+        **kwargs,
+    ) -> Any:
+        # Make the Anthropic API call synchronously
+        response = self._completions.create(*args, **kwargs)
 
-        try:
-            # Make API call
-            response = self._completions.create(*args, **kwargs)
-
-            # SYNC LOGGING + SUPERVISION
+        async def supervision_task():
             try:
-                new_response = self.chat_supervision_manager.handle_language_model_interaction(
-                    response,
+                # Asynchronously log the request
+                await self.chat_supervision_manager.log_request(kwargs, self.run_id)
+            except AsteroidLoggingError as e:
+                logging.warning(f"Failed to log request: {str(e)}")
+            except Exception as e:
+                logging.error(f"Unexpected error during request logging: {str(e)}")
+                traceback.print_exc()
+
+            try:
+                await self.chat_supervision_manager.handle_language_model_interaction(
+                    response=response,
                     request_kwargs=kwargs,
                     run_id=self.run_id,
                     execution_mode=self.execution_mode,
                     completions=self._completions,
                     args=args,
-                    message_supervisors=message_supervisors
+                    message_supervisors=message_supervisors,
                 )
-                if new_response is not None:
-                    return new_response
             except Exception as e:
-                print(f"Warning: Failed to log response: {str(e)}")
+                logging.warning(f"Failed to process supervision: {str(e)}")
                 traceback.print_exc()
 
-            return response
+        # Schedule the supervision task and get future
+        future = schedule_task(supervision_task())
+        return response
 
-        except AnthropicError as e:
-            try:
-                raise e
-            except AsteroidLoggingError:
-                raise e
-
-
-    async def create_async(self, *args, message_supervisors: Optional[List[List[Callable]]] = None, **kwargs) -> Any:
+    def create_sync(
+        self,
+        *args,
+        message_supervisors: Optional[List[List[Callable]]] = None,
+        **kwargs,
+    ) -> Any:
+        # Log the entire request payload synchronously
         try:
-            self.chat_supervision_manager.log_request(kwargs, self.run_id)
+            asyncio.run(self.chat_supervision_manager.log_request(kwargs, self.run_id))
         except AsteroidLoggingError as e:
             print(f"Warning: Failed to log request: {str(e)}")
 
         response = self._completions.create(*args, **kwargs)
 
         try:
-            # Make API call
-            thread = threading.Thread(
-                target=self.chat_supervision_manager.handle_language_model_interaction,
-                kwargs={
-                    "response": response, "request_kwargs": kwargs, "run_id": self.run_id,
-                    "execution_mode": self.execution_mode, "completions": self._completions, "args": args,
-                    "message_supervisors": message_supervisors
-                }
+            # Run supervision synchronously
+            supervised_response = asyncio.run(
+                self.chat_supervision_manager.handle_language_model_interaction(
+                    response=response,
+                    request_kwargs=kwargs,
+                    run_id=self.run_id,
+                    execution_mode=self.execution_mode,
+                    completions=self._completions,
+                    args=args,
+                    message_supervisors=message_supervisors,
+                )
             )
-
-            thread.start()
+            if supervised_response is not None:
+                response = supervised_response
             return response
         except AnthropicError as e:
             try:
@@ -114,23 +191,10 @@ class CompletionsWrapper:
             except AsteroidLoggingError:
                 raise e
 
-    async def async_log_response(self, response, kwargs, args, message_supervisors):
-        try:
-            await asyncio.to_thread(
-                self.chat_supervision_manager.handle_language_model_interaction, response, request_kwargs=kwargs,
-                run_id=self.run_id,
-                execution_mode=self.execution_mode, completions=self._completions, args=args,
-                message_supervisors=message_supervisors
-            )
-        except Exception as e:
-            print(f"Warning: Failed to log response: {str(e)}")
-            traceback.print_exc()
-
-
 def asteroid_anthropic_client(
-        anthropic_client: Anthropic,
-        run_id: UUID,
-        execution_mode: str = "supervision"
+    anthropic_client: Anthropic,
+    run_id: UUID,
+    execution_mode: str = "supervision",
 ) -> Anthropic:
     """
     Wraps an Anthropic client instance with logging capabilities and registers supervisors.
@@ -139,26 +203,29 @@ def asteroid_anthropic_client(
         raise ValueError("Client is required")
 
     if not hasattr(anthropic_client, 'messages'):
-        raise ValueError("Invalid Anthropic client: missing chat attribute")
+        raise ValueError("Invalid Anthropic client: missing messages attribute")
 
     try:
-        # TODO - Clean up where this is instantiated
-        client = Client(base_url=settings.api_url, headers={"X-Asteroid-Api-Key": f"{settings.api_key}"})
+        client = Client(
+            base_url=settings.api_url,
+            headers={"X-Asteroid-Api-Key": f"{settings.api_key}"},
+        )
         supervision_manager = _create_supervision_manager(client)
         anthropic_client.messages = CompletionsWrapper(
             anthropic_client.messages,
             supervision_manager,
             run_id,
-            execution_mode
+            execution_mode,
         )
         return anthropic_client
     except Exception as e:
         raise RuntimeError(f"Failed to wrap Anthropic client: {str(e)}") from e
 
-
 def _create_supervision_manager(client):
     model_provider_helper = AnthropicSupervisionHelper()
     api_logger = APILogger(client, model_provider_helper)
     supervision_runner = SupervisionRunner(client, api_logger, model_provider_helper)
-    supervision_manager = AsteroidChatSupervisionManager(client, api_logger, supervision_runner, model_provider_helper)
+    supervision_manager = AsteroidChatSupervisionManager(
+        client, api_logger, supervision_runner, model_provider_helper
+    )
     return supervision_manager

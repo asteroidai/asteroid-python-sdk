@@ -3,14 +3,14 @@ Supervisors for handling approvals in the Asteroid SDK via Inspect AI.
 """
 
 from functools import wraps
-from typing import List, Dict, Optional, Callable, Union
+from typing import List, Optional, Callable, Union
 from uuid import UUID
+import json
 from anthropic.types.message import Message as AnthropicMessage
 
 from asteroid_sdk.api.api_logger import APILogger
 from asteroid_sdk.api.generated.asteroid_api_client import Client
 from asteroid_sdk.api.supervision_runner import SupervisionRunner
-from asteroid_sdk.supervision.model.tool_call import ToolCall
 from asteroid_sdk.registration.helper import get_supervisor_chains_for_tool, get_run_messages, APIClientFactory
 from asteroid_sdk.settings import settings
 from asteroid_sdk.supervision.base_supervisors import human_supervisor, llm_supervisor
@@ -27,34 +27,40 @@ from inspect_ai.tool import ToolCall as InspectAIToolCall, ToolCallView as Inspe
 
 from anthropic.types.text_block import TextBlock
 from anthropic.types.tool_use_block import ToolUseBlock
+from anthropic.types.text_block import TextBlock
+from anthropic.types.tool_use_block import ToolUseBlock
 from asteroid_sdk.supervision.helpers.anthropic_helper import AnthropicSupervisionHelper
 from asteroid_sdk.supervision.helpers.openai_helper import OpenAiSupervisionHelper
+from asteroid_sdk.supervision.helpers.gemini_helper import GeminiHelper
 from .utils import (
     transform_asteroid_approval_to_inspect_ai_approval,
     convert_state_messages_to_openai_messages,
     convert_state_output_to_openai_response,
     convert_state_messages_to_anthropic_messages,
     convert_state_output_to_anthropic_response,
+    convert_state_messages_to_gemini_messages,
+    convert_state_output_to_gemini_response,
 )
 import logging
+from asteroid_sdk.supervision.helpers.model_provider_helper import Provider
 
 # Mappings for model provider helpers and conversion functions
 MODEL_PROVIDER_HELPERS = {
     "openai": OpenAiSupervisionHelper,
     "anthropic": AnthropicSupervisionHelper,
-    # Add "google": GoogleSupervisionHelper when implemented
+    "google": GeminiHelper,
 }
 
 CONVERT_STATE_MESSAGES_TO_MESSAGES = {
     "openai": convert_state_messages_to_openai_messages,
     "anthropic": convert_state_messages_to_anthropic_messages,
-    # "google": convert_state_messages_to_google_messages when available
+    "google": convert_state_messages_to_gemini_messages,
 }
 
 CONVERT_STATE_OUTPUT_TO_RESPONSE = {
     "openai": convert_state_output_to_openai_response,
     "anthropic": convert_state_output_to_anthropic_response,
-    # "google": convert_state_output_to_google_response when available
+    "google": convert_state_output_to_gemini_response,
 }
 
 EXTRACT_TOOL_CALLS_FROM_RESPONSE = {
@@ -62,7 +68,7 @@ EXTRACT_TOOL_CALLS_FROM_RESPONSE = {
     "anthropic": lambda response: [
         content_block for content_block in response.content if isinstance(content_block, ToolUseBlock)
     ],
-    # "google": lambda response: ... when available
+    "google": lambda response: GeminiHelper().get_tool_call_from_response(response),
 }
 
 def with_asteroid_supervision(
@@ -100,9 +106,6 @@ def with_asteroid_supervision(
             Returns:
                 Approval: The approval decision.
             """
-            assert state is not None, "State is required"
-            assert call is not None, "Call is required"
-
 
             # Retrieve the supervision run using the sample ID from the state
             run_name = str(state.sample_id)
@@ -113,12 +116,15 @@ def with_asteroid_supervision(
             run_id = run.run_id
 
             # Determine the model provider helper based on the model API
-            provider = state.model.api
-            model_provider_helper_class = MODEL_PROVIDER_HELPERS.get(provider)
-            if model_provider_helper_class is None:
-                raise Exception(f"Model API {provider} not supported")
-            model_provider_helper = model_provider_helper_class()
-
+            if state.model.api == "openai":
+                model_provider_helper = OpenAiSupervisionHelper()
+            elif state.model.api == "anthropic":
+                model_provider_helper = AnthropicSupervisionHelper()
+            elif state.model.api == "google":
+                model_provider_helper = GeminiHelper()
+            else:
+                raise Exception(f"Model API {state.model.api} not supported")
+            
             # Initialize the client, API logger, and supervision runner
             client = APIClientFactory.get_client()
             api_logger = APILogger(client, model_provider_helper)
@@ -134,32 +140,45 @@ def with_asteroid_supervision(
             tool_call_data = None
             tool = None
 
-            # Get the provider-specific conversion functions
-            convert_output_func = CONVERT_STATE_OUTPUT_TO_RESPONSE.get(provider)
-            if convert_output_func is None:
-                raise Exception(f"Model API {provider} not supported")
-
             if len(asteroid_messages) != 0:
                 # Get the last message from the run
-                # This is needed when multiple tool calls are made in a single message
                 last_message = asteroid_messages[-1]
                 if last_message.tool_calls:
                     # Match Asteroid's tool call ID to the Inspect AI tool call ID
                     for idx, _tool_call in enumerate(last_message.tool_calls):
-                        if _tool_call.call_id == call.id:
-                            tool_call_idx = idx
-                            tool_id = _tool_call.tool_id
-                            tool_call_id = _tool_call.id
-
-                            # Convert state output to provider-specific response
-                            response = convert_output_func(state.output)
-                            break
-
+                        if state.model.api == "google":
+                            if _tool_call.name == call.function and json.loads(_tool_call.arguments) == call.arguments:
+                                tool_call_idx = idx
+                                tool_id = _tool_call.tool_id
+                                tool_call_id = _tool_call.id
+                                tool_call_data = _tool_call # TODO: This might need fixing we might have to instantiate new ToolCall, not pass AsteroidToolCall
+                                tool = supervision_runner.get_tool(tool_id)
+                                break
+                        else:
+                            if _tool_call.id == call.id:
+                                tool_call_idx = idx
+                                tool_id = _tool_call.tool_id
+                                tool_call_id = _tool_call.id
+                                tool_call_data = _tool_call
+                                tool = supervision_runner.get_tool(tool_id)
+                                break
+                        
+            # If no existing messages or tool call not found, log the first message
             if len(asteroid_messages) == 0 or tool_call_idx is None:
                 # Handle provider-specific logic
-                # This is needed when the first tool call is made
-                request_kwargs, response, response_tool_calls = handle_provider(state, supervision_context)
+                if state.model.api == "openai":
+                    # OpenAI provider handling
+                    request_kwargs, response, response_tool_calls = handle_openai_provider(state, supervision_context)
+                elif state.model.api == "anthropic":
+                    # Anthropic provider handling
+                    request_kwargs, response, response_tool_calls = handle_anthropic_provider(state, supervision_context)
+                elif state.model.api == "google":
+                    # Google provider handling
+                    request_kwargs, response, response_tool_calls = handle_google_provider(state, supervision_context)
+                else:
+                    raise Exception(f"Model API {state.model.api} not supported")
 
+                # Log the interaction with the LLM and get the choice IDs
                 create_new_chat_response = api_logger.log_llm_interaction(
                     response,
                     request_kwargs,
@@ -169,11 +188,10 @@ def with_asteroid_supervision(
 
                 # Match Asteroid's tool call ID to the Inspect AI tool call ID
                 tool_call_idx, tool_id, tool_call_id = match_tool_call_ids(
-                    response_tool_calls, call, choice_ids
+                    response_tool_calls, call, choice_ids, state.model.api
                 )
-
-            tool = supervision_runner.get_tool(tool_id)
-            tool_call_data = model_provider_helper.get_tool_call_from_response(response)[tool_call_idx]
+                tool = supervision_runner.get_tool(tool_id)
+                tool_call_data = model_provider_helper.get_tool_call_from_response(response)[tool_call_idx]
 
             # Get supervisor chains for the tool
             supervisor_chains = get_supervisor_chains_for_tool(tool_id)
@@ -224,9 +242,9 @@ def with_asteroid_supervision(
 
     return decorator
 
-def handle_provider(state: TaskState, supervision_context: SupervisionContext):
+def handle_openai_provider(state: TaskState, supervision_context: SupervisionContext):
     """
-    Handle provider-specific logic for any supported provider.
+    Handle OpenAI provider-specific logic.
 
     Args:
         state (TaskState): Current task state.
@@ -235,59 +253,118 @@ def handle_provider(state: TaskState, supervision_context: SupervisionContext):
     Returns:
         Tuple of (request_kwargs, response, response_tool_calls)
     """
-    provider = state.model.api
-    convert_messages_func = CONVERT_STATE_MESSAGES_TO_MESSAGES.get(provider)
-    convert_output_func = CONVERT_STATE_OUTPUT_TO_RESPONSE.get(provider)
-    extract_tool_calls_func = EXTRACT_TOOL_CALLS_FROM_RESPONSE.get(provider)
-
-    if None in (convert_messages_func, convert_output_func, extract_tool_calls_func):
-        raise Exception(f"Model API {provider} not supported")
-
-    # Convert state messages to provider-specific format
-    provider_messages = convert_messages_func(state.messages[:-1])
+    # Convert state messages to OpenAI format
+    openai_messages = convert_state_messages_to_openai_messages(state.messages[:-1])
 
     # Prepare request kwargs
     request_kwargs = {
-        "messages": provider_messages,
+        "messages": openai_messages,
         "model": state.model.name,
     }
 
-    # Convert state output to provider-specific response
-    response = convert_output_func(state.output)
+    # Convert state output to OpenAI response
+    response = convert_state_output_to_openai_response(state.output)
 
     # Update the supervision context with messages
-    if provider == "anthropic":
-        supervision_context.update_messages(
-            request_kwargs["messages"],
-            anthropic=True,
-            system_message=request_kwargs.get("system", None),
-        )
-    else:
-        supervision_context.update_messages(request_kwargs["messages"])
+    supervision_context.update_messages(request_kwargs, provider=Provider.OPENAI)
 
     # Extract tool calls from the response
-    response_tool_calls = extract_tool_calls_func(response)
+    response_tool_calls = response.choices[0].message.tool_calls
 
     return request_kwargs, response, response_tool_calls
 
-def match_tool_call_ids(response_tool_calls: List, call: InspectAIToolCall, choice_ids: List):
+def handle_anthropic_provider(state: TaskState, supervision_context: SupervisionContext):
+    """
+    Handle Anthropic provider-specific logic.
+
+    Args:
+        state (TaskState): Current task state.
+        supervision_context (SupervisionContext): The supervision context.
+
+    Returns:
+        Tuple of (request_kwargs, response, response_tool_calls)
+    """
+    # Convert state messages to Anthropic format
+    anthropic_messages = convert_state_messages_to_anthropic_messages(state.messages[:-1])
+
+    # Prepare request kwargs
+    request_kwargs = {
+        "messages": anthropic_messages,
+        "model": state.model.name,
+    }
+
+    # Convert state output to Anthropic response
+    response = convert_state_output_to_anthropic_response(state.output)
+
+    # Update the supervision context with messages
+    supervision_context.update_messages(
+        request_kwargs,
+        provider=Provider.ANTHROPIC,
+        system_message=request_kwargs.get("system", None),
+    )
+
+    # Extract tool calls from the response
+    response_tool_calls = [
+        content_block for content_block in response.content if isinstance(content_block, ToolUseBlock)
+    ]
+
+    return request_kwargs, response, response_tool_calls
+
+def handle_google_provider(state: TaskState, supervision_context: SupervisionContext):
+    """
+    Handle Google provider-specific logic.
+
+    Args:
+        state (TaskState): Current task state.
+        supervision_context (SupervisionContext): The supervision context.
+
+    Returns:
+        Tuple of (request_kwargs, response, response_tool_calls)
+    """
+    # Convert state messages to Gemini format
+    gemini_messages = convert_state_messages_to_gemini_messages(state.messages[:-1])
+
+    # Prepare request kwargs
+    request_kwargs = {
+        "contents": gemini_messages,
+        "model": state.model.name,
+    }
+
+    # Convert state output to Gemini response
+    response = convert_state_output_to_gemini_response(state.output)
+
+    # Update the supervision context with messages
+    supervision_context.update_messages(request_kwargs, provider=Provider.GEMINI)
+
+    # Extract tool calls from the response
+    response_tool_calls = GeminiHelper().get_tool_call_from_response(response)
+
+    return request_kwargs, response, response_tool_calls
+
+def match_tool_call_ids(response_tool_calls: List, call: InspectAIToolCall, choice_ids: List,
+                        provider: str):
     """
     Match Asteroid's tool call ID to the Inspect AI tool call ID.
 
     Args:
         response_tool_calls (List): List of tool calls from the response.
-        call (InspectAIToolCall): The original InspectAIToolCall object from Inspect AI.
+        call (ToolCall): The original ToolCall object from Inspect AI.
         choice_ids (List): List of choice IDs from the API response.
-
+        provider (str): The model provider.
     Returns:
         Tuple of (tool_call_idx, tool_id, tool_call_id)
     """
     for idx, _tool_call in enumerate(response_tool_calls):
-        if _tool_call.id == call.id:
-            tool_id = choice_ids[0].tool_call_ids[idx].tool_id
-            tool_call_id = choice_ids[0].tool_call_ids[idx].tool_call_id
-            return idx, tool_id, tool_call_id
-    raise Exception("Tool call ID not found in response tool calls")
+        if provider == "google":
+            # There are no ids in Gemini we need to match on the function name and arguments
+            if _tool_call.tool_name == call.function and _tool_call.tool_params == call.arguments:
+                break
+        else: 
+            if _tool_call.id == call.id:
+                break
+    tool_id = choice_ids[0].tool_call_ids[idx].tool_id
+    tool_call_id = choice_ids[0].tool_call_ids[idx].tool_call_id
+    return idx, tool_id, tool_call_id
 
 def find_supervisor_in_chains(supervisor_chains: List, supervisor_name: str):
     """
@@ -309,7 +386,7 @@ def find_supervisor_in_chains(supervisor_chains: List, supervisor_name: str):
                 return supervisor, supervisor_chain_id, position_in_chain
     return None, None, None
 
-@approver
+@approver(name="human_approver")
 def human_approver(timeout: int = 86400, n: int = 3) -> Approver:
     """
     Human approver function for Inspect AI.
