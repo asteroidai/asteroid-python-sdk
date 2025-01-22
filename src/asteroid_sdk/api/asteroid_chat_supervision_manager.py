@@ -86,7 +86,7 @@ class AsteroidChatSupervisionManager:
         supervision_context = run.supervision_context
         # Update messages on the supervision context
         supervision_context.update_messages(request_kwargs,
-                                            provider=self.model_provider_helper.get_provider(), # TODO Change this to get it from the provider helper
+                                            provider=self.model_provider_helper.get_provider(),
                                             system_message=request_kwargs.get('system', None))
 
         response, response_data_tool_calls = self.get_tool_calls_and_modify_response_if_necessary(

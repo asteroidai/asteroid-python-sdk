@@ -69,8 +69,7 @@ class SupervisionRunner:
 
         new_response = copy.deepcopy(response)
         # TODO - Check if this is still relevant
-        #  !IMPORTANT! - We're only accepting 1 tool_call ATM. There's code that is called within this
-        #  this loop that assumes this.
+        #  We do not allow multiple tool calls with resampling, it should work without. Tested with Gemini and nothing else
         decisions: List[Dict] = []
         for idx, tool_call in enumerate(response_data_tool_calls):
             tool_id = UUID(choice_ids[0].tool_call_ids[idx].tool_id)
