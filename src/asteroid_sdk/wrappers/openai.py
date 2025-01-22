@@ -154,8 +154,6 @@ class CompletionsWrapper:
                     args=args,
                     message_supervisors=message_supervisors,
                 )
-                if new_response is not None:
-                    return new_response
             except Exception as e:
                 logging.warning(f"Failed to process supervision: {str(e)}")
                 traceback.print_exc()
