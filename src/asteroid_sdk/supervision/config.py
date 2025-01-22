@@ -101,7 +101,18 @@ class SupervisionContext:
         messages_text = []
         for message in self.openai_messages:
             role = message.get('role', 'Unknown').capitalize()
-            content = message.get('content', '').strip()
+            content = message.get('content', '')
+            if type(content) == str:
+                content = content.strip()
+            elif type(content) == list:
+                # TODO: Solve this - it happens when there is an image
+                content = ''
+                for m in content:
+                    if m.type == 'text':
+                        content += m.text
+                    elif m.type == 'image_url':
+                        content += f'Image' #{m.image_url}' #TODO: Add the image somehow
+                
             message_str = f"**{role}:**\n{content}" if content else f"**{role}:**"
 
             # Handle tool calls if present

@@ -14,7 +14,7 @@ from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_message import (
     ChatCompletionMessage,
 )
-
+from google.generativeai.types import GenerateContentResponse
 from asteroid_sdk.api.generated.asteroid_api_client import Client
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.create_new_chat import (
     sync_detailed as create_new_chat_sync_detailed,
@@ -35,7 +35,7 @@ class APILogger:
 
     def log_llm_interaction(
             self,
-            response: ChatCompletion | Message,
+            response: ChatCompletion | Message | GenerateContentResponse,
             request_kwargs: Dict[str, Any],
             run_id: UUID,
     ) -> ChatIds:
@@ -81,7 +81,7 @@ class APILogger:
             raise
 
     def _convert_to_json(
-            self, response: Any, request_kwargs: Any
+            self, response: ChatCompletion | Message | GenerateContentResponse, request_kwargs: Any
     ) -> tuple[str, str]:
         """
         Convert the response and request data to JSON strings.

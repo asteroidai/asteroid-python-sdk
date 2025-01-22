@@ -10,7 +10,6 @@ import time
 import copy
 import logging
 import json
-import json
 
 from asteroid_sdk.api.generated.asteroid_api_client.client import Client
 from asteroid_sdk.api.generated.asteroid_api_client.models import CreateProjectBody, CreateTaskBody
@@ -50,7 +49,6 @@ from asteroid_sdk.supervision.model.tool_call import ToolCall
 from asteroid_sdk.api.generated.asteroid_api_client.models.tool import Tool
 from asteroid_sdk.utils.utils import get_function_code
 from asteroid_sdk.settings import settings
-from asteroid_sdk.supervision.config import SupervisionDecision, SupervisionDecisionType, ModifiedData
 from asteroid_sdk.supervision.config import SupervisionDecision, SupervisionDecisionType, ModifiedData
 
 class APIClientFactory:
@@ -616,20 +614,15 @@ def wait_for_human_decision(supervision_request_id: UUID, timeout: int = 86400) 
                 if isinstance(status, Status) and status in [Status.FAILED, Status.COMPLETED, Status.TIMEOUT]:
                     # Map status to SupervisionDecision
                     logging.debug(f"Polling for human decision completed. Status: {status}")
-                    logging.debug(f"Polling for human decision completed. Status: {status}")
                     return status
                 else:
                     logging.debug("Waiting for human supervisor decision...")
-                    logging.debug("Waiting for human supervisor decision...")
             else:
-                logging.warning(f"Unexpected response while polling for supervision status: {response}")
                 logging.warning(f"Unexpected response while polling for supervision status: {response}")
         except Exception as e:
             logging.error(f"Error while polling for supervision status: {e}")
-            logging.error(f"Error while polling for supervision status: {e}")
 
         if time.time() - start_time > timeout:
-            logging.warning(f"Timed out waiting for human supervision decision. Timeout: {timeout} seconds")
             logging.warning(f"Timed out waiting for human supervision decision. Timeout: {timeout} seconds")
             return Status.TIMEOUT
 
