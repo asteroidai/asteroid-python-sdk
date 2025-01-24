@@ -1,25 +1,26 @@
 from http import HTTPStatus
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, cast
 from uuid import UUID
 
 import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.create_run_body import CreateRunBody
+from ...models.error_response import ErrorResponse
+from ...models.update_run_metadata_body import UpdateRunMetadataBody
 from ...types import Response
 
 
 def _get_kwargs(
-    task_id: UUID,
+    run_id: UUID,
     *,
-    body: CreateRunBody,
+    body: UpdateRunMetadataBody,
 ) -> Dict[str, Any]:
     headers: Dict[str, Any] = {}
 
     _kwargs: Dict[str, Any] = {
-        "method": "post",
-        "url": f"/task/{task_id}/run",
+        "method": "put",
+        "url": f"/run/{run_id}/metadata",
     }
 
     _body = body.to_dict()
@@ -31,18 +32,25 @@ def _get_kwargs(
     return _kwargs
 
 
-def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[UUID]:
-    if response.status_code == 201:
-        response_201 = UUID(response.json())
+def _parse_response(
+    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
+) -> Optional[Union[Any, ErrorResponse]]:
+    if response.status_code == 204:
+        response_204 = cast(Any, None)
+        return response_204
+    if response.status_code == 404:
+        response_404 = ErrorResponse.from_dict(response.json())
 
-        return response_201
+        return response_404
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
     else:
         return None
 
 
-def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[UUID]:
+def _build_response(
+    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
+) -> Response[Union[Any, ErrorResponse]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -52,27 +60,27 @@ def _build_response(*, client: Union[AuthenticatedClient, Client], response: htt
 
 
 def sync_detailed(
-    task_id: UUID,
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: CreateRunBody,
-) -> Response[UUID]:
-    """Create a new run for a task
+    body: UpdateRunMetadataBody,
+) -> Response[Union[Any, ErrorResponse]]:
+    """Update the metadata of a run
 
     Args:
-        task_id (UUID):
-        body (CreateRunBody):
+        run_id (UUID):
+        body (UpdateRunMetadataBody):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[UUID]
+        Response[Union[Any, ErrorResponse]]
     """
 
     kwargs = _get_kwargs(
-        task_id=task_id,
+        run_id=run_id,
         body=body,
     )
 
@@ -84,54 +92,54 @@ def sync_detailed(
 
 
 def sync(
-    task_id: UUID,
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: CreateRunBody,
-) -> Optional[UUID]:
-    """Create a new run for a task
+    body: UpdateRunMetadataBody,
+) -> Optional[Union[Any, ErrorResponse]]:
+    """Update the metadata of a run
 
     Args:
-        task_id (UUID):
-        body (CreateRunBody):
+        run_id (UUID):
+        body (UpdateRunMetadataBody):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        UUID
+        Union[Any, ErrorResponse]
     """
 
     return sync_detailed(
-        task_id=task_id,
+        run_id=run_id,
         client=client,
         body=body,
     ).parsed
 
 
 async def asyncio_detailed(
-    task_id: UUID,
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: CreateRunBody,
-) -> Response[UUID]:
-    """Create a new run for a task
+    body: UpdateRunMetadataBody,
+) -> Response[Union[Any, ErrorResponse]]:
+    """Update the metadata of a run
 
     Args:
-        task_id (UUID):
-        body (CreateRunBody):
+        run_id (UUID):
+        body (UpdateRunMetadataBody):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[UUID]
+        Response[Union[Any, ErrorResponse]]
     """
 
     kwargs = _get_kwargs(
-        task_id=task_id,
+        run_id=run_id,
         body=body,
     )
 
@@ -141,28 +149,28 @@ async def asyncio_detailed(
 
 
 async def asyncio(
-    task_id: UUID,
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-    body: CreateRunBody,
-) -> Optional[UUID]:
-    """Create a new run for a task
+    body: UpdateRunMetadataBody,
+) -> Optional[Union[Any, ErrorResponse]]:
+    """Update the metadata of a run
 
     Args:
-        task_id (UUID):
-        body (CreateRunBody):
+        run_id (UUID):
+        body (UpdateRunMetadataBody):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        UUID
+        Union[Any, ErrorResponse]
     """
 
     return (
         await asyncio_detailed(
-            task_id=task_id,
+            run_id=run_id,
             client=client,
             body=body,
         )

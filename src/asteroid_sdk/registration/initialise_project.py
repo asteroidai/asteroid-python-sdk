@@ -16,7 +16,8 @@ def asteroid_init(
         task_name: str = "My Agent",
         run_name: str = "My Run",
         execution_settings: Dict[str, Any] = {},
-        message_supervisors: Optional[List[Callable]] = None
+        message_supervisors: Optional[List[Callable]] = None,
+        run_id: Optional[UUID] = None
 ) -> UUID:
     """
     Initializes supervision for a project, task, and run.
@@ -26,7 +27,7 @@ def asteroid_init(
     logging.info(f"Registered new project '{project_name}' with ID: {project_id}")
     task_id = register_task(project_id, task_name)
     logging.info(f"Registered new task '{task_name}' with ID: {task_id}")
-    run_id = create_run(project_id, task_id, run_name)
+    run_id = create_run(project_id, task_id, run_name, run_id)
     logging.info(f"Registered new run with ID: {run_id}")
 
     supervision_config = get_supervision_config()

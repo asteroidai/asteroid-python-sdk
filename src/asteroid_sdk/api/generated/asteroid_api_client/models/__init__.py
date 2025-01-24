@@ -20,6 +20,7 @@ from .chat_format import ChatFormat
 from .chat_ids import ChatIds
 from .choice_ids import ChoiceIds
 from .create_project_body import CreateProjectBody
+from .create_run_body import CreateRunBody
 from .create_run_tool_body import CreateRunToolBody
 from .create_run_tool_body_attributes import CreateRunToolBodyAttributes
 from .create_task_body import CreateTaskBody
@@ -81,6 +82,7 @@ __all__ = (
     "ChatIds",
     "ChoiceIds",
     "CreateProjectBody",
+    "CreateRunBody",
     "CreateRunToolBody",
     "CreateRunToolBodyAttributes",
     "CreateTaskBody",

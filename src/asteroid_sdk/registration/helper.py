@@ -14,6 +14,7 @@ import json
 from asteroid_sdk.api.generated.asteroid_api_client.client import Client
 from asteroid_sdk.api.generated.asteroid_api_client.models import CreateProjectBody, CreateTaskBody
 from asteroid_sdk.api.generated.asteroid_api_client.models.chain_request import ChainRequest
+from asteroid_sdk.api.generated.asteroid_api_client.models.create_run_body import CreateRunBody
 from asteroid_sdk.api.generated.asteroid_api_client.models.create_run_tool_body import CreateRunToolBody
 from asteroid_sdk.api.generated.asteroid_api_client.models.create_run_tool_body_attributes import CreateRunToolBodyAttributes
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor_attributes import SupervisorAttributes
@@ -166,6 +167,7 @@ def create_run(
     project_id: UUID,
     task_id: UUID,
     run_name: Optional[str] = None,
+    run_id: Optional[UUID] = None
 ) -> UUID:
     """
     Creates a new run for a task under a project using the asteroid API.
@@ -191,11 +193,14 @@ def create_run(
         raise ValueError(f"Task '{task.task_name}' does not belong to project '{project_name}'.")
     task_name = task.task_name
 
-
     try:
         response = create_run_sync_detailed(
             client=client,
             task_id=task_id,
+            body=CreateRunBody(
+                name=run_name if run_name else UNSET,
+                run_id=run_id if run_id else UNSET
+            )
         )
 
         if (
