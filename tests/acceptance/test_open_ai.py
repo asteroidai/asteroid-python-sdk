@@ -26,7 +26,7 @@ class TestOpenAi(AbstractAcceptanceTest):
 
     @patch('asteroid_sdk.registration.helper.APIClientFactory.get_client')
     def test_original_response_is_returned_with_supervision_is_successful(self, mock_get_client):
-        self.original_response_when_supervision_successful(mock_get_client)
+        self.original_response_when_supervision_successful(mock_get_client, True)
         # THIS IS KEY- maybe we should instantiate the wrapper after we've run the init?
         self.openai_wrapper.run_id = self.run_id
 
@@ -56,7 +56,7 @@ class TestOpenAi(AbstractAcceptanceTest):
 
     @patch('asteroid_sdk.registration.helper.APIClientFactory.get_client')
     def test_resamples_and_then_works(self, mock_get_client):
-        self.resamples_then_works_globals(mock_get_client)
+        self.resamples_then_works_globals(mock_get_client, True)
         # Mock call to LM
         # Note- the allow: true param is what the supervisor is after to approve
         desired_completion_message = self.create_chat_completion_with_tool_calls(

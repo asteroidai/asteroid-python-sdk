@@ -38,7 +38,7 @@ class AbstractAcceptanceTest(ABC, unittest.TestCase):
 
         self.run_id = uuid.uuid4()
 
-    def resamples_then_works_globals(self, mock_get_client):
+    def resamples_then_works_globals(self, mock_get_client, should_add_get_run_call: bool = False):
         """
         Sets up the global mocks for the resamples_then_works test
         """
@@ -135,22 +135,43 @@ class AbstractAcceptanceTest(ABC, unittest.TestCase):
         # src/asteroid_sdk/registration/helper.py:453
         send_supervision_result__response = make_created_response_with_id(supervision_result_id)
 
-        # Setup mock calls to asteroid API for during supervision
-        self.mock_asteroid_client.get_httpx_client.return_value.request.side_effect = [
-            send_chats_response,
-            get_tool_supervisor_chains_response,
-            get_tool_response,
-            send_supervision_request_response,
-            send_supervision_result__response,
+        get_run_response = None
+        if should_add_get_run_call:
+            # asteroid_sdk.registration.helper.get_run
+            # src/asteroid_sdk/registration/helper.py:346
+            get_run_response = make_ok_response(
+                {
 
-            send_chats_response,
-            get_tool_supervisor_chains_response,
-            get_tool_response,
-            send_supervision_request_response,
-            send_supervision_result__response,
-        ]
+                    "id": "123e4567-e89b-12d3-a456-426614174000",
+                    "task_id": "123e4567-e89b-12d3-a456-426614174001",
+                    "created_at": "2023-10-01T12:34:56Z",
+                    "status": "pending",
+                    "result": "Success",
+                    "metadata": {
+                        "key1": "value1",
+                        "key2": "value2"
+                    }
+                }
+            )
 
-    def original_response_when_supervision_successful(self, mock_get_client):
+        # # Setup mock calls to asteroid API for during supervision
+        api_responses = []
+        if should_add_get_run_call:
+            api_responses.append(get_run_response)
+        api_responses.append(send_chats_response)
+        api_responses.append(get_tool_supervisor_chains_response)
+        api_responses.append(get_tool_response)
+        api_responses.append(send_supervision_request_response)
+        api_responses.append(send_supervision_result__response)
+
+        api_responses.append(send_chats_response)
+        api_responses.append(get_tool_supervisor_chains_response)
+        api_responses.append(get_tool_response)
+        api_responses.append(send_supervision_request_response)
+        api_responses.append(send_supervision_result__response)
+        self.mock_asteroid_client.get_httpx_client.return_value.request.side_effect = api_responses
+
+    def original_response_when_supervision_successful(self, mock_get_client, should_add_get_run_call: bool = False):
         # Mocking API client from the point it's called in registration
         mock_get_client.return_value = self.mock_asteroid_client
 
@@ -185,7 +206,7 @@ class AbstractAcceptanceTest(ABC, unittest.TestCase):
 
         # asteroid_sdk.api.asteroid_chat_supervision_manager.AsteroidChatSupervisionManager.handle_language_model_interaction
         # src/asteroid_sdk/api/asteroid_chat_supervision_manager.py:73
-        send_chats_response = make_ok_response(
+        send_chats_response = make_created_response(
             ChatIds(
                 chat_id=first_chat_id,
                 choice_ids=[ChoiceIds(
@@ -244,8 +265,26 @@ class AbstractAcceptanceTest(ABC, unittest.TestCase):
         # src/asteroid_sdk/registration/helper.py:453
         send_supervision_result__response = make_created_response_with_id(supervision_result_id)
 
+        get_run_response = None
+        if should_add_get_run_call:
+            # asteroid_sdk.registration.helper.get_run
+            # src/asteroid_sdk/registration/helper.py:346
+            get_run_response = make_ok_response(
+                {
+
+                    "id": "123e4567-e89b-12d3-a456-426614174000",
+                    "task_id": "123e4567-e89b-12d3-a456-426614174001",
+                    "created_at": "2023-10-01T12:34:56Z",
+                    "status": "pending",
+                    "metadata": {
+                        "key1": "value1",
+                        "key2": "value2"
+                    }
+                }
+            )
         # Setup mock calls to asteroid API for during supervision
         self.mock_asteroid_client.get_httpx_client.return_value.request.side_effect = [
+            get_run_response,
             send_chats_response,
             get_tool_supervisor_chains_response,
             get_tool_response,
