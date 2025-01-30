@@ -5,6 +5,7 @@ class Status(str, Enum):
     ASSIGNED = "assigned"
     COMPLETED = "completed"
     FAILED = "failed"
+    PAUSED = "paused"
     PENDING = "pending"
     TIMEOUT = "timeout"
 

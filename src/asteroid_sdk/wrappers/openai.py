@@ -23,6 +23,7 @@ from asteroid_sdk.api.supervision_runner import SupervisionRunner
 from asteroid_sdk.settings import settings
 from asteroid_sdk.supervision.config import ExecutionMode
 from asteroid_sdk.supervision.helpers.openai_helper import OpenAiSupervisionHelper
+from asteroid_sdk.api.generated.asteroid_api_client.api.run.get_run import sync as get_run_sync
 
 # Create a background event loop
 background_loop = asyncio.new_event_loop()
@@ -102,12 +103,25 @@ class CompletionsWrapper:
         self.run_id = run_id
         self.execution_mode = execution_mode
 
+    async def _wait_for_unpaused(self):
+        """Wait until the run is no longer in paused state."""
+        while True:
+            run_status = get_run_sync(client=self.chat_supervision_manager.client, run_id=str(self.run_id))
+            if run_status and run_status.status != "paused":
+                break
+            logging.info(f"Run {self.run_id} is paused, waiting for unpaused state...")
+            await asyncio.sleep(1)  # Wait 1 second before checking again
+
     def create(
         self,
         *args,
         message_supervisors: Optional[List[List[Callable]]] = None,
         **kwargs,
     ) -> Any:
+        # Wait for unpaused state before proceeding - blocks until complete
+        future = schedule_task(self._wait_for_unpaused())
+        future.result()  # This blocks until the future is done
+        
         # If parallel tool calls not set to false (or doesn't exist, defaulting to true), then raise an error.
         # Parallel tool calls do not work at the moment due to conflicts when trying to 'resample'
         if kwargs.get("tools", None) and kwargs.get("parallel_tool_calls", True):
@@ -131,6 +145,10 @@ class CompletionsWrapper:
         message_supervisors: Optional[List[List[Callable]]] = None,
         **kwargs,
     ) -> Any:
+        # Wait for unpaused state before proceeding - blocks until complete
+        future = schedule_task(self._wait_for_unpaused())
+        future.result()  # This blocks until the future is done
+        
         # Make the OpenAI API call synchronously
         response = self._completions.create(*args, **kwargs)
 
