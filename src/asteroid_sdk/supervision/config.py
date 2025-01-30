@@ -239,17 +239,17 @@ class SupervisionContext:
         """Updates the context with a list of OpenAI messages."""
         if system_message:
             # Anthropic stores the system message outside of the messages list
-            final_messages = [{"role": "system", "content": system_message}] + messages.copy()
+            final_messages = [{"role": "system", "content": system_message}] + messages['messages'].copy()
         else:
-            final_messages = messages.copy()
+            final_messages = messages['messages'].copy()
 
         with self.lock:
             if provider == Provider.ANTHROPIC:
-                self.anthropic_messages = final_messages['messages']
+                self.anthropic_messages = final_messages
             elif provider == Provider.OPENAI:
-                self.openai_messages = final_messages['messages']
+                self.openai_messages = final_messages
             elif provider == Provider.GEMINI:
-                self.gemini_messages = final_messages['contents']
+                self.gemini_messages = final_messages
 
     def add_local_supervisor(self, supervisor_id: UUID, supervisor_func: Callable):
         """Add a supervisor function to the config."""
