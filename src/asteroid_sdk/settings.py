@@ -13,11 +13,11 @@ class Settings:
         logging.info("Initializing Asteroid SDK settings")
 
         # Asteroid API settings
-        self.api_key = os.getenv('ASTEROID_API_KEY')
+        self.api_key = os.getenv('ASTEROID_API_KEY') # Don't error out if this is not set, user might provide in init
         self.api_url = os.getenv('ASTEROID_API_URL', "https://api.asteroid.ai/api/v1")
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
 
-        # NEW: Optional integration
+        # Optional integration
         self.langfuse_enabled = (
             os.getenv('LANGFUSE_ENABLED', 'false').lower() in ['true', '1']
         )
@@ -30,8 +30,6 @@ class Settings:
                 raise ValueError("LANGFUSE_HOST environment variable is required")
 
         # Validate required settings
-        if not self.api_key:
-            raise ValueError("ASTEROID_API_KEY environment variable is required")
         if not self.api_url:
             raise ValueError("ASTEROID_API_URL environment variable is required")
 
