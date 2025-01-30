@@ -25,10 +25,37 @@ from asteroid_sdk.supervision.config import ExecutionMode
 from asteroid_sdk.supervision.helpers.openai_helper import OpenAiSupervisionHelper
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.get_run import sync as get_run_sync
 
+# Conditionally import Langfuse if enabled
+if settings.langfuse_enabled:
+    try:
+        from langfuse.decorators import observe as langfuse_observe
+    except ImportError:
+        logging.warning(
+            "Langfuse is enabled in settings but not installed. Falling back to no-op."
+        )
+        LangfuseOpenAI = None
+        langfuse_observe = None
+else:
+    # If Langfuse is not enabled, do not import or do anything special
+    LangfuseOpenAI = None
+    langfuse_observe = None
+
+
+def no_op_observe(*args, **kwargs):
+    """A no-op decorator for when Langfuse is not enabled or not installed."""
+    def decorator(func):
+        return func
+    return decorator
+
+
+# Use langfuse observe if available, otherwise no-op
+observe = langfuse_observe if langfuse_observe else no_op_observe
+
 # Create a background event loop
 background_loop = asyncio.new_event_loop()
 tasks = set()
 loop_running = True  # Flag to keep the loop running
+
 
 def start_background_loop(loop: asyncio.AbstractEventLoop):
     asyncio.set_event_loop(loop)
@@ -41,10 +68,14 @@ def start_background_loop(loop: asyncio.AbstractEventLoop):
             loop.run_until_complete(asyncio.gather(*pending))
         loop.close()
 
+
 # Start the background loop in a new thread
 # Set daemon=True but handle shutdown properly
-background_thread = threading.Thread(target=start_background_loop, args=(background_loop,), daemon=True)
+background_thread = threading.Thread(
+    target=start_background_loop, args=(background_loop,), daemon=True
+)
 background_thread.start()
+
 
 # Function to schedule tasks
 def schedule_task(coro):
@@ -56,6 +87,7 @@ def schedule_task(coro):
     future.add_done_callback(task_done)
     return future  # Return future so caller can wait if needed
 
+
 def task_done(fut):
     tasks.discard(fut)
     try:
@@ -64,18 +96,19 @@ def task_done(fut):
         logging.error(f"Background task failed: {e}")
         traceback.print_exc()
 
+
 def shutdown_background_loop():
     global loop_running
     loop_running = False  # Signal the loop to stop accepting new tasks
-    
+
     # Wait for all tasks to complete with a timeout
     wait_start = time.time()
     while tasks and (time.time() - wait_start) < 30:  # 30 second timeout
         time.sleep(0.1)
-        
+
     if tasks:
         logging.warning(f"{len(tasks)} tasks still pending at shutdown")
-    
+
     try:
         # Stop the loop
         background_loop.call_soon_threadsafe(background_loop.stop)
@@ -85,11 +118,13 @@ def shutdown_background_loop():
     # Give the thread a chance to finish cleanly
     background_thread.join(timeout=5)
 
+
 # Register shutdown handler
 atexit.register(shutdown_background_loop)
 
+
 class CompletionsWrapper:
-    """Wraps chat completions with logging and supervision capabilities"""
+    """Wraps chat completions with logging and supervision capabilities."""
 
     def __init__(
         self,
@@ -126,16 +161,22 @@ class CompletionsWrapper:
         # Parallel tool calls do not work at the moment due to conflicts when trying to 'resample'
         if kwargs.get("tools", None) and kwargs.get("parallel_tool_calls", True):
             # parallel_tool_calls is only supported by openai when tools are specified
-            logging.warning("Parallel tool calls are not supported, setting parallel_tool_calls=False")
+            logging.warning(
+                "Parallel tool calls are not supported, setting parallel_tool_calls=False"
+            )
             kwargs["parallel_tool_calls"] = False
-            
+
         # Depending on the execution mode, handle supervision synchronously
         if self.execution_mode == ExecutionMode.MONITORING:
             # Run in monitoring mode (asynchronous supervision)
-            return self.create_with_async_supervision(*args, message_supervisors=message_supervisors, **kwargs)
+            return self.create_with_async_supervision(
+                *args, message_supervisors=message_supervisors, **kwargs
+            )
         elif self.execution_mode == ExecutionMode.SUPERVISION:
             # Run in sync supervision mode
-            return self.create_sync(*args, message_supervisors=message_supervisors, **kwargs)
+            return self.create_sync(
+                *args, message_supervisors=message_supervisors, **kwargs
+            )
         else:
             raise ValueError(f"Invalid execution mode: {self.execution_mode}")
 
@@ -145,12 +186,12 @@ class CompletionsWrapper:
         message_supervisors: Optional[List[List[Callable]]] = None,
         **kwargs,
     ) -> Any:
-        # Wait for unpaused state before proceeding - blocks until complete
-        future = schedule_task(self._wait_for_unpaused())
-        future.result()  # This blocks until the future is done
-        
-        # Make the OpenAI API call synchronously
-        response = self._completions.create(*args, **kwargs)
+        @observe(name="openai_wrapper_create_async") #TODO: This is now throwing pydantic warnings
+        def create_completion(*args, **kwargs):
+            response = self._completions.create(*args, **kwargs)
+            return response
+
+        response = create_completion(*args, **kwargs)
 
         async def supervision_task():
             try:
@@ -177,7 +218,7 @@ class CompletionsWrapper:
                 traceback.print_exc()
 
         # Schedule the supervision task and get future
-        future = schedule_task(supervision_task())
+        schedule_task(supervision_task())
         return response
 
     def create_sync(
@@ -191,9 +232,14 @@ class CompletionsWrapper:
             # Use asyncio.run for one-off async calls
             asyncio.run(self.chat_supervision_manager.log_request(kwargs, self.run_id))
         except AsteroidLoggingError as e:
-            print(f"Warning: Failed to log request: {str(e)}")
+            logging.warning(f"Failed to log request: {str(e)}")
 
-        response = self._completions.create(*args, **kwargs)
+        @observe(name="openai_wrapper_create_sync") #TODO: This is now throwing pydantic warnings
+        def create_completion(*args, **kwargs):
+            response = self._completions.create(*args, **kwargs)
+            return response
+
+        response = create_completion(*args, **kwargs)
 
         try:
             # Use asyncio.run for the supervision handling
@@ -205,17 +251,14 @@ class CompletionsWrapper:
                     execution_mode=self.execution_mode,
                     completions=self._completions,
                     args=args,
-                    message_supervisors=message_supervisors
+                    message_supervisors=message_supervisors,
                 )
             )
             if supervised_response is not None:
                 return supervised_response
             return response
         except OpenAIError as e:
-            try:
-                raise e
-            except AsteroidLoggingError:
-                raise e
+            raise e
 
 
 def asteroid_openai_client(
