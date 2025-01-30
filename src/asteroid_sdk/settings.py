@@ -17,6 +17,18 @@ class Settings:
         self.api_url = os.getenv('ASTEROID_API_URL', "https://api.asteroid.ai/api/v1")
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
 
+        # NEW: Optional integration
+        self.langfuse_enabled = (
+            os.getenv('LANGFUSE_ENABLED', 'false').lower() in ['true', '1']
+        )
+        if self.langfuse_enabled:
+            if not os.getenv('LANGFUSE_PUBLIC_KEY'):
+                raise ValueError("LANGFUSE_PUBLIC_KEY environment variable is required")
+            if not os.getenv('LANGFUSE_SECRET_KEY'):
+                raise ValueError("LANGFUSE_SECRET_KEY environment variable is required")
+            if not os.getenv('LANGFUSE_HOST'):
+                raise ValueError("LANGFUSE_HOST environment variable is required")
+
         # Validate required settings
         if not self.api_key:
             raise ValueError("ASTEROID_API_KEY environment variable is required")
