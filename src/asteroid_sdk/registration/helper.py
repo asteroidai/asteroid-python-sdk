@@ -43,6 +43,7 @@ from asteroid_sdk.api.generated.asteroid_api_client.models.supervision_result im
 from asteroid_sdk.api.generated.asteroid_api_client.models.decision import Decision
 from asteroid_sdk.api.generated.asteroid_api_client.models.status import Status
 from asteroid_sdk.api.generated.asteroid_api_client.models.run import Run
+from asteroid_sdk.api.generated.asteroid_api_client.models.create_run_body import CreateRunBody
 from asteroid_sdk.api.generated.asteroid_api_client.models.asteroid_message import AsteroidMessage
 from asteroid_sdk.supervision.config import SupervisionContext, get_supervision_config
 from asteroid_sdk.supervision.helpers.model_provider_helper import ModelProviderHelper, AvailableProviderResponses
