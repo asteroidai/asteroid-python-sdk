@@ -1,9 +1,11 @@
 from typing import Any, Callable, List, Optional, Dict
 from uuid import UUID
 
+from asteroid_sdk import settings
+from asteroid_sdk.api.generated.asteroid_api_client.client import Client
 from asteroid_sdk.api.generated.asteroid_api_client.models import Status
 from asteroid_sdk.registration.helper import (
-    create_run, register_project, register_task, register_tools_and_supervisors_from_registry, submit_run_status,
+    APIClientFactory, create_run, register_project, register_task, register_tools_and_supervisors_from_registry, submit_run_status,
     register_tool, create_supervisor_chain, register_supervisor_chains
 )
 from asteroid_sdk.supervision.config import ExecutionMode, RejectionPolicy, get_supervision_config
@@ -17,11 +19,28 @@ def asteroid_init(
         run_name: str = "My Run",
         execution_settings: Dict[str, Any] = {},
         message_supervisors: Optional[List[Callable]] = None,
-        run_id: Optional[UUID] = None
+        run_id: Optional[UUID] = None,
+        api_key: Optional[str] = None
 ) -> UUID:
     """
     Initializes supervision for a project, task, and run.
+
+    Args:
+        project_name: Name of the project
+        task_name: Name of the task
+        run_name: Name of the run
+        execution_settings: Dictionary of execution settings
+        message_supervisors: Optional list of message supervisor functions
+        run_id: Optional UUID for the run
+        api_key: Optional API key to override the default from environment variables
     """
+    if api_key:
+        # If the user provided an API key, override the client in settings
+        logging.info("Overriding API key env variable with provided API key")
+        APIClientFactory._instance = Client(
+            base_url=settings.api_url,
+            headers={"X-Asteroid-Api-Key": api_key}
+        )
 
     project_id = register_project(project_name)
     logging.info(f"Registered new project '{project_name}' with ID: {project_id}")
@@ -34,7 +53,7 @@ def asteroid_init(
     supervision_config.set_execution_settings(execution_settings)
 
     register_tools_and_supervisors_from_registry(run_id=run_id, 
-                                                 message_supervisors=message_supervisors)
+                                               message_supervisors=message_supervisors)
 
     return run_id
 
