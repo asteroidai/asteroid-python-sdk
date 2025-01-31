@@ -28,6 +28,7 @@ from asteroid_sdk.supervision.config import (
     get_supervision_config,
 )
 from asteroid_sdk.supervision.helpers.gemini_helper import GeminiHelper
+from asteroid_sdk.wrappers.helpers import wait_for_unpaused
 
 # Create a background event loop
 background_loop = asyncio.new_event_loop()
@@ -115,6 +116,10 @@ class GeminiGenerateContentWrapper:
         message_supervisors: Optional[List[List[Callable]]] = None,
         **kwargs,
     ) -> Any:
+        # Wait for unpaused state before proceeding - blocks until complete
+        future = schedule_task(wait_for_unpaused(self.run_id, self.chat_supervision_manager.client))
+        future.result()  # This blocks until the future is done
+
         # TODO - Check if there's any other config that we need to sort out here
         # if kwargs.get("tool_choice", {}) and not kwargs["tool_choice"].get("disable_parallel_tool_use", False):
         #     logging.warning("Parallel tool calls are not supported, setting disable_parallel_tool_use=True")

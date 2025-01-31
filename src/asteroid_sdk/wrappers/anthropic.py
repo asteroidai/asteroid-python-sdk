@@ -23,6 +23,7 @@ from asteroid_sdk.api.supervision_runner import SupervisionRunner
 from asteroid_sdk.settings import settings
 from asteroid_sdk.supervision.config import ExecutionMode
 from asteroid_sdk.supervision.helpers.anthropic_helper import AnthropicSupervisionHelper
+from asteroid_sdk.wrappers.helpers import wait_for_unpaused
 
 # Conditionally import Langfuse if enabled (modeled after wrappers/openai.py)
 if settings.langfuse_enabled:
@@ -135,6 +136,10 @@ class CompletionsWrapper:
         message_supervisors: Optional[List[List[Callable]]] = None,
         **kwargs,
     ) -> Any:
+        # Wait for unpaused state before proceeding - blocks until complete
+        future = schedule_task(wait_for_unpaused(self.run_id, self.chat_supervision_manager.client))
+        future.result()  # This blocks until the future is done
+
         # If parallel tool calls are not set to false, then update accordingly.
         # Parallel tool calls do not work at the moment due to conflicts when trying to 'resample'
         if kwargs.get("tool_choice", {}) and not kwargs["tool_choice"].get("disable_parallel_tool_use", False):

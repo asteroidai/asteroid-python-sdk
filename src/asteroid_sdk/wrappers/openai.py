@@ -26,6 +26,7 @@ from asteroid_sdk.supervision.helpers.openai_helper import OpenAiSupervisionHelp
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.get_run import sync as get_run_sync
 
 from asteroid_sdk.registration.helper import APIClientFactory
+from asteroid_sdk.wrappers.helpers import wait_for_unpaused
 
 # Conditionally import Langfuse if enabled
 if settings.langfuse_enabled:
@@ -140,29 +141,6 @@ class CompletionsWrapper:
         self.run_id = run_id
         self.execution_mode = execution_mode
 
-    async def _wait_for_unpaused(self):
-        """Wait until the run is no longer in paused state."""
-        start_time = time.time()
-        timeout = 300  # 5 minute timeout
-        
-        while True:
-            try:
-                run_status = get_run_sync(client=self.chat_supervision_manager.client, run_id=str(self.run_id))
-                if run_status and run_status.status != "paused":
-                    break
-                
-                # Check if we've exceeded timeout
-                if time.time() - start_time > timeout:
-                    logging.error(f"Timeout waiting for run {self.run_id} to unpause")
-                    break
-                    
-                logging.info(f"Run {self.run_id} is paused, waiting for unpaused state...")
-                await asyncio.sleep(1)  # Wait 1 second before checking again
-                
-            except Exception as e:
-                logging.error(f"Error checking run status: {e}")
-                break  # Exit the loop on error instead of continuing indefinitely
-
     def create(
         self,
         *args,
@@ -170,7 +148,7 @@ class CompletionsWrapper:
         **kwargs,
     ) -> Any:
         # Wait for unpaused state before proceeding - blocks until complete
-        future = schedule_task(self._wait_for_unpaused())
+        future = schedule_task(wait_for_unpaused(self.run_id, self.chat_supervision_manager.client))
         future.result()  # This blocks until the future is done
         
         # If parallel tool calls not set to false (or doesn't exist, defaulting to true), then raise an error.
