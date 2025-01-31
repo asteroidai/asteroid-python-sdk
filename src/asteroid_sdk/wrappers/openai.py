@@ -25,6 +25,8 @@ from asteroid_sdk.supervision.config import ExecutionMode
 from asteroid_sdk.supervision.helpers.openai_helper import OpenAiSupervisionHelper
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.get_run import sync as get_run_sync
 
+from asteroid_sdk.registration.helper import APIClientFactory
+
 # Conditionally import Langfuse if enabled
 if settings.langfuse_enabled:
     try:
@@ -288,10 +290,9 @@ def asteroid_openai_client(
         raise ValueError("Invalid OpenAI client: missing chat attribute")
 
     try:
-        client = Client(
-            base_url=settings.api_url,
-            headers={"X-Asteroid-Api-Key": f"{settings.api_key}"},
-        )
+        # Get the client from the factory
+        client = APIClientFactory.get_client()
+
         supervision_manager = _create_supervision_manager(client)
         openai_client.chat.completions = CompletionsWrapper(
             openai_client.chat.completions, supervision_manager, run_id, execution_mode

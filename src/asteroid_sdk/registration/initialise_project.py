@@ -35,8 +35,11 @@ def asteroid_init(
         api_key: Optional API key to override the default from environment variables
     """
     if api_key:
-        # If the user provided an API key, override the client in settings
+        # 1) Set the key on the global settings object
         logging.info("Overriding API key env variable with provided API key")
+        settings.api_key = api_key
+
+        # 2) Overwrite the API client directly
         APIClientFactory._instance = Client(
             base_url=settings.api_url,
             headers={"X-Asteroid-Api-Key": api_key}
@@ -53,7 +56,7 @@ def asteroid_init(
     supervision_config.set_execution_settings(execution_settings)
 
     register_tools_and_supervisors_from_registry(run_id=run_id, 
-                                               message_supervisors=message_supervisors)
+                                                 message_supervisors=message_supervisors)
 
     return run_id
 
