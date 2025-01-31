@@ -1,10 +1,12 @@
+"""
+Helper functions for interacting with running agents
+"""
 import asyncio
 import time
 import logging
 
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.get_run import sync as get_run_sync
 from asteroid_sdk.api.generated.asteroid_api_client.client import Client
-
 
 async def wait_for_unpaused(run_id: str, client: Client):
     """Wait until the run is no longer in paused state."""

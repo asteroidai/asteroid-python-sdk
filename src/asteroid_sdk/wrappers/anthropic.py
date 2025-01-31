@@ -23,7 +23,7 @@ from asteroid_sdk.api.supervision_runner import SupervisionRunner
 from asteroid_sdk.settings import settings
 from asteroid_sdk.supervision.config import ExecutionMode
 from asteroid_sdk.supervision.helpers.anthropic_helper import AnthropicSupervisionHelper
-from asteroid_sdk.wrappers.helpers import wait_for_unpaused
+from asteroid_sdk.interaction.helper import wait_for_unpaused
 
 # Conditionally import Langfuse if enabled (modeled after wrappers/openai.py)
 if settings.langfuse_enabled:

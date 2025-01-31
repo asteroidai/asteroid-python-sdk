@@ -28,7 +28,7 @@ from asteroid_sdk.supervision.config import (
     get_supervision_config,
 )
 from asteroid_sdk.supervision.helpers.gemini_helper import GeminiHelper
-from asteroid_sdk.wrappers.helpers import wait_for_unpaused
+from asteroid_sdk.interaction.helper import wait_for_unpaused
 
 # Create a background event loop
 background_loop = asyncio.new_event_loop()

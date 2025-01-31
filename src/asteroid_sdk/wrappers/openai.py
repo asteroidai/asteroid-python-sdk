@@ -26,7 +26,7 @@ from asteroid_sdk.supervision.helpers.openai_helper import OpenAiSupervisionHelp
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.get_run import sync as get_run_sync
 
 from asteroid_sdk.registration.helper import APIClientFactory
-from asteroid_sdk.wrappers.helpers import wait_for_unpaused
+from asteroid_sdk.interaction.helper import wait_for_unpaused
 
 # Conditionally import Langfuse if enabled
 if settings.langfuse_enabled:
