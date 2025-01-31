@@ -140,12 +140,26 @@ class CompletionsWrapper:
 
     async def _wait_for_unpaused(self):
         """Wait until the run is no longer in paused state."""
+        start_time = time.time()
+        timeout = 300  # 5 minute timeout
+        
         while True:
-            run_status = get_run_sync(client=self.chat_supervision_manager.client, run_id=str(self.run_id))
-            if run_status and run_status.status != "paused":
-                break
-            logging.info(f"Run {self.run_id} is paused, waiting for unpaused state...")
-            await asyncio.sleep(1)  # Wait 1 second before checking again
+            try:
+                run_status = get_run_sync(client=self.chat_supervision_manager.client, run_id=str(self.run_id))
+                if run_status and run_status.status != "paused":
+                    break
+                
+                # Check if we've exceeded timeout
+                if time.time() - start_time > timeout:
+                    logging.error(f"Timeout waiting for run {self.run_id} to unpause")
+                    break
+                    
+                logging.info(f"Run {self.run_id} is paused, waiting for unpaused state...")
+                await asyncio.sleep(1)  # Wait 1 second before checking again
+                
+            except Exception as e:
+                logging.error(f"Error checking run status: {e}")
+                break  # Exit the loop on error instead of continuing indefinitely
 
     def create(
         self,
