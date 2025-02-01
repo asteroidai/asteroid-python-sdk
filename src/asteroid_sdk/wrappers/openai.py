@@ -148,7 +148,7 @@ class CompletionsWrapper:
         **kwargs,
     ) -> Any:
         # Wait for unpaused state before proceeding - blocks until complete
-        future = schedule_task(wait_for_unpaused(self.run_id, self.chat_supervision_manager.client))
+        future = schedule_task(wait_for_unpaused(self.run_id))
         future.result()  # This blocks until the future is done
         
         # If parallel tool calls not set to false (or doesn't exist, defaulting to true), then raise an error.
