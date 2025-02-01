@@ -75,8 +75,8 @@ def update_run_metadata(run_id: str, metadata: dict):
             run_id=run_id,
             body=metadata_body
         )
-        if response.status_code != 204:
-            raise Exception(f"Failed to update run metadata for {run_id}: {response.status_code} {response.content}")
+        if response.status_code < 200 or response.status_code >= 300:
+            raise Exception(f"Failed to update run metadata for {run_id}: {response.status_code}. Response was: {response.content}")
     except Exception as e:
         logging.error(f"Error updating run metadata for {run_id}: {e}")
         raise e
