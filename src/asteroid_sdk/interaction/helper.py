@@ -23,8 +23,13 @@ async def wait_for_unpaused(run_id: str):
         
     while True:
         try:
-            run_status = get_run_sync(client=client, run_id=run_id)
-            if run_status and run_status.status != "paused":
+            run = get_run_sync(client=client, run_id=run_id)
+        
+            # Check if the run has been killed
+            if run.result == "failed":
+                raise Exception(f"Run {run_id} has failed") 
+
+            if run.status != "paused":
                 break
             
             # Check if we've exceeded timeout
