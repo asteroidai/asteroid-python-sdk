@@ -19,6 +19,7 @@ from asteroid_sdk.api.generated.asteroid_api_client.models.create_run_tool_body 
 from asteroid_sdk.api.generated.asteroid_api_client.models.create_run_tool_body_attributes import CreateRunToolBodyAttributes
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor_attributes import SupervisorAttributes
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor_type import SupervisorType
+from asteroid_sdk.api.generated.asteroid_api_client.models.update_run_result_body import UpdateRunResultBody
 from asteroid_sdk.api.generated.asteroid_api_client.types import UNSET
 from asteroid_sdk.api.generated.asteroid_api_client.api.project.create_project import sync_detailed as create_project_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.task.create_task import sync_detailed as create_task_sync_detailed
@@ -36,6 +37,7 @@ from asteroid_sdk.api.generated.asteroid_api_client.api.supervisor.get_tool_supe
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.update_run_status import sync_detailed as update_run_status_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.get_run import sync_detailed as get_run_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.get_run_messages import sync_detailed as get_run_messages_sync_detailed
+from asteroid_sdk.api.generated.asteroid_api_client.api.run.update_run_result import sync_detailed as update_run_result_sync_detailed
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor import Supervisor
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervisor_chain import SupervisorChain
 from asteroid_sdk.api.generated.asteroid_api_client.models.supervision_request import SupervisionRequest
@@ -740,6 +742,23 @@ def submit_run_status(run_id: UUID, status: Status):
             raise Exception(f"Failed to submit run status. Response: {response}")
     except Exception as e:
         logging.error(f"Error submitting run status: {e}, Response: {response}")
+        raise
+
+def submit_run_result(run_id: UUID, result: str):
+    r = UpdateRunResultBody(result=result)
+    try:
+        client = APIClientFactory.get_client()
+        response = update_run_result_sync_detailed(
+            client=client,
+            run_id=run_id,
+            body=r
+        )
+        if response.status_code in [201]:
+            logging.info(f"Successfully submitted run result for run ID: {run_id}")
+        else:
+            raise Exception(f"Failed to submit run result. Response: {response}")
+    except Exception as e:
+        logging.error(f"Error submitting run result: {e}, Response: {response}")
         raise
 
 

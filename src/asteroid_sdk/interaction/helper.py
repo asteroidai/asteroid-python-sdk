@@ -9,7 +9,7 @@ from asteroid_sdk.api.generated.asteroid_api_client.api.run.get_run import sync 
 from asteroid_sdk.api.generated.asteroid_api_client.client import Client
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.update_run_status import sync_detailed as update_run_status_sync
 from asteroid_sdk.api.generated.asteroid_api_client.models.status import Status
-from asteroid_sdk.registration.helper import APIClientFactory
+from asteroid_sdk.registration.helper import APIClientFactory, submit_run_result, submit_run_status
 from asteroid_sdk.api.generated.asteroid_api_client.api.run.update_run_metadata import sync_detailed as update_run_metadata_sync
 from asteroid_sdk.api.generated.asteroid_api_client.models.update_run_metadata_body import UpdateRunMetadataBody
 
@@ -49,7 +49,7 @@ def pause_run(run_id: str):
     client = APIClientFactory.get_client()
 
     try:
-        response = update_run_status_sync(client=client, run_id=run_id, body=Status(status="paused"))
+        response = submit_run_status(run_id, Status.PAUSED)
         if response is not None:
             raise Exception(f"Failed to pause run {run_id}: {response.status_code} {response.content}")
     except Exception as e:
@@ -61,10 +61,9 @@ def fail_run(run_id: str, error_message: str):
     client = APIClientFactory.get_client()
 
     try:
-        response = update_run_status_sync(client=client, run_id=run_id, body=Status(status="failed", error_message=error_message))
-        if response is not None:
-            raise Exception(f"Failed to fail run {run_id}: {response.status_code} {response.content}")
+        submit_run_status(run_id, Status.FAILED)
         update_run_metadata(run_id, {"fail_reason": error_message})
+        submit_run_result(run_id, "failed")
     except Exception as e:
         logging.error(f"Error failing run {run_id}: {e}")
         raise e
