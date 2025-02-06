@@ -12,6 +12,8 @@ from asteroid_sdk.supervision.config import ExecutionMode, RejectionPolicy, get_
 from asteroid_sdk.api.generated.asteroid_api_client.types import UNSET
 
 import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 def asteroid_init(
         project_name: str = "My Project",
@@ -36,7 +38,7 @@ def asteroid_init(
     """
     if api_key:
         # 1) Set the key on the global settings object
-        logging.info("Overriding API key env variable with provided API key")
+        logger.info("Overriding API key env variable with provided API key")
         settings.api_key = api_key
 
         # 2) Overwrite the API client directly
@@ -46,11 +48,11 @@ def asteroid_init(
         )
 
     project_id = register_project(project_name)
-    logging.info(f"Registered new project '{project_name}' with ID: {project_id}")
+    logger.info(f"Registered new project '{project_name}' with ID: {project_id}")
     task_id = register_task(project_id, task_name)
-    logging.info(f"Registered new task '{task_name}' with ID: {task_id}")
+    logger.info(f"Registered new task '{task_name}' with ID: {task_id}")
     run_id = create_run(project_id, task_id, run_name, run_id)
-    logging.info(f"Registered new run with ID: {run_id}")
+    logger.info(f"Registered new run with ID: {run_id}")
 
     supervision_config = get_supervision_config()
     supervision_config.set_execution_settings(execution_settings)
@@ -114,7 +116,7 @@ def register_tool_with_supervisors(
             tool_id=tool_api.id
         )
         
-        logging.info(
+        logger.info(
             f"Registered tool '{tool_api.name}' with ID {tool_api.id} and {len(supervisor_chain_ids)} supervisor chains."
         )
     else:
