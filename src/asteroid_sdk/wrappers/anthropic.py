@@ -92,15 +92,15 @@ def task_done(fut):
 def shutdown_background_loop():
     global loop_running
     loop_running = False  # Signal the loop to stop accepting new tasks
-    
+
     # Wait for all tasks to complete with a timeout
     wait_start = time.time()
     while tasks and (time.time() - wait_start) < 30:  # 30 second timeout
         time.sleep(0.1)
-        
+
     if tasks:
         logging.warning(f"{len(tasks)} tasks still pending at shutdown")
-    
+
     try:
         # Stop the loop
         background_loop.call_soon_threadsafe(background_loop.stop)
@@ -196,15 +196,19 @@ class CompletionsWrapper:
         schedule_task(supervision_task())
         return response
 
+
     def create_sync(
-        self,
-        *args,
-        message_supervisors: Optional[List[List[Callable]]] = None,
-        **kwargs,
+            self,
+            *args,
+            message_supervisors: Optional[List[List[Callable]]] = None,
+            **kwargs,
     ) -> Any:
-        # Log the entire request payload synchronously
+        # Remove the loop creation code since we already have a background loop
+
+        # Log the request asynchronously using the background loop
         try:
-            asyncio.run(self.chat_supervision_manager.log_request(kwargs, self.run_id))
+            future = schedule_task(self.chat_supervision_manager.log_request(kwargs, self.run_id))
+            future.result()  # Wait for the result
         except AsteroidLoggingError as e:
             print(f"Warning: Failed to log request: {str(e)}")
         except Exception as e:
@@ -217,8 +221,8 @@ class CompletionsWrapper:
         response = create_completion(*args, **kwargs)
 
         try:
-            # Run supervision synchronously
-            supervised_response = asyncio.run(
+            # Use schedule_task for the supervision
+            future = schedule_task(
                 self.chat_supervision_manager.handle_language_model_interaction(
                     response=response,
                     request_kwargs=kwargs,
@@ -229,6 +233,8 @@ class CompletionsWrapper:
                     message_supervisors=message_supervisors,
                 )
             )
+            supervised_response = future.result()  # Wait for the result
+
             if supervised_response is not None:
                 response = supervised_response
             return response
@@ -261,7 +267,7 @@ def asteroid_anthropic_client(
             headers={"X-Asteroid-Api-Key": f"{settings.api_key}"},
         )
         supervision_manager = _create_supervision_manager(client)
-        
+
         completions_wrapper = CompletionsWrapper(
             anthropic_client.messages,
             supervision_manager,
@@ -269,7 +275,7 @@ def asteroid_anthropic_client(
             execution_mode,
         )
         anthropic_client.messages = completions_wrapper
-        
+
         # Replace the beta.messages.create method as well - Needed for Computer Use
         completions_beta_wrapper = CompletionsWrapper(
             anthropic_client.beta.messages,
@@ -278,7 +284,7 @@ def asteroid_anthropic_client(
             execution_mode,
         )
         anthropic_client.beta.messages = completions_beta_wrapper
-        
+
         return anthropic_client
     except Exception as e:
         raise RuntimeError(f"Failed to wrap Anthropic client: {str(e)}") from e
