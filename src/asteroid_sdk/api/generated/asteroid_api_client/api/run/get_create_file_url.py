@@ -1,42 +1,47 @@
 from http import HTTPStatus
 from typing import Any, Dict, Optional, Union, cast
+from uuid import UUID
 
 import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.user import User
+from ...models.get_create_file_url_body import GetCreateFileURLBody
 from ...types import Response
 
 
-def _get_kwargs() -> Dict[str, Any]:
+def _get_kwargs(
+    run_id: UUID,
+    *,
+    body: GetCreateFileURLBody,
+) -> Dict[str, Any]:
+    headers: Dict[str, Any] = {}
+
     _kwargs: Dict[str, Any] = {
-        "method": "get",
-        "url": "/api_key/validate",
+        "method": "post",
+        "url": f"/run/{run_id}/get_create_file_url",
     }
 
+    _body = body.to_dict()
+
+    _kwargs["json"] = _body
+    headers["Content-Type"] = "application/json"
+
+    _kwargs["headers"] = headers
     return _kwargs
 
 
-def _parse_response(
-    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[Union[Any, User]]:
+def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[str]:
     if response.status_code == 200:
-        response_200 = User.from_dict(response.json())
-
+        response_200 = cast(str, response.json())
         return response_200
-    if response.status_code == 401:
-        response_401 = cast(Any, None)
-        return response_401
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
     else:
         return None
 
 
-def _build_response(
-    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[Union[Any, User]]:
+def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[str]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -46,20 +51,29 @@ def _build_response(
 
 
 def sync_detailed(
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[Union[Any, User]]:
-    """Validate an API key
+    body: GetCreateFileURLBody,
+) -> Response[str]:
+    """Get a signed URL to create a file for a run
+
+    Args:
+        run_id (UUID):
+        body (GetCreateFileURLBody):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[Any, User]]
+        Response[str]
     """
 
-    kwargs = _get_kwargs()
+    kwargs = _get_kwargs(
+        run_id=run_id,
+        body=body,
+    )
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -69,39 +83,56 @@ def sync_detailed(
 
 
 def sync(
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[Union[Any, User]]:
-    """Validate an API key
+    body: GetCreateFileURLBody,
+) -> Optional[str]:
+    """Get a signed URL to create a file for a run
+
+    Args:
+        run_id (UUID):
+        body (GetCreateFileURLBody):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[Any, User]
+        str
     """
 
     return sync_detailed(
+        run_id=run_id,
         client=client,
+        body=body,
     ).parsed
 
 
 async def asyncio_detailed(
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Response[Union[Any, User]]:
-    """Validate an API key
+    body: GetCreateFileURLBody,
+) -> Response[str]:
+    """Get a signed URL to create a file for a run
+
+    Args:
+        run_id (UUID):
+        body (GetCreateFileURLBody):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Union[Any, User]]
+        Response[str]
     """
 
-    kwargs = _get_kwargs()
+    kwargs = _get_kwargs(
+        run_id=run_id,
+        body=body,
+    )
 
     response = await client.get_async_httpx_client().request(**kwargs)
 
@@ -109,21 +140,29 @@ async def asyncio_detailed(
 
 
 async def asyncio(
+    run_id: UUID,
     *,
     client: Union[AuthenticatedClient, Client],
-) -> Optional[Union[Any, User]]:
-    """Validate an API key
+    body: GetCreateFileURLBody,
+) -> Optional[str]:
+    """Get a signed URL to create a file for a run
+
+    Args:
+        run_id (UUID):
+        body (GetCreateFileURLBody):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Union[Any, User]
+        str
     """
 
     return (
         await asyncio_detailed(
+            run_id=run_id,
             client=client,
+            body=body,
         )
     ).parsed

@@ -30,6 +30,9 @@ from .failure_category import FailureCategory
 from .failure_report import FailureReport
 from .failure_report_severity import FailureReportSeverity
 from .failure_report_tool_context import FailureReportToolContext
+from .feedback import Feedback
+from .feedback_request import FeedbackRequest
+from .get_create_file_url_body import GetCreateFileURLBody
 from .hub_stats import HubStats
 from .hub_stats_assigned_reviews import HubStatsAssignedReviews
 from .hub_stats_review_distribution import HubStatsReviewDistribution
@@ -60,6 +63,7 @@ from .tool_call_ids import ToolCallIds
 from .tool_supervision_result import ToolSupervisionResult
 from .update_run_metadata_body import UpdateRunMetadataBody
 from .update_run_result_body import UpdateRunResultBody
+from .user import User
 
 __all__ = (
     "AgentReport",
@@ -92,6 +96,9 @@ __all__ = (
     "FailureReport",
     "FailureReportSeverity",
     "FailureReportToolContext",
+    "Feedback",
+    "FeedbackRequest",
+    "GetCreateFileURLBody",
     "HubStats",
     "HubStatsAssignedReviews",
     "HubStatsReviewDistribution",
@@ -122,4 +129,5 @@ __all__ = (
     "ToolSupervisionResult",
     "UpdateRunMetadataBody",
     "UpdateRunResultBody",
+    "User",
 )
