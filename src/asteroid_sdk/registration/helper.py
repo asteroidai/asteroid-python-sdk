@@ -238,7 +238,7 @@ def get_run(run_id: UUID) -> Run:
     Returns:
         Union[ErrorResponse, Run]: The retrieved run or an error response.
     """
-    
+
     client = APIClientFactory.get_client()
     try:
         response = get_run_sync_detailed(run_id=run_id, client=client)
@@ -297,7 +297,7 @@ def register_tool(
 
     # Determine tool details based on its type
     if isinstance(tool, dict):
-        tool_name = tool['name']
+        tool_name = tool.get("name", tool.get("type", "Undefined"))
         attributes = CreateRunToolBodyAttributes.from_dict(
             src_dict=tool.get('input_schema', {}).get('properties', {})
         )
@@ -379,7 +379,7 @@ def register_tools_and_supervisors_from_registry(
         # Register the tool
         tool = register_tool(run_id=run_id, tool=func, ignored_attributes=ignored_attributes)
         tool_id = tool.id
-        
+
         # Add the tool_id to the supervision context
         supervision_context.update_tool_id(function_name=tool_name, tool_id=tool_id)
 
@@ -446,7 +446,7 @@ def register_supervisor(supervisor_name: str,
                         supervisor_type: SupervisorType,
                         supervisor_code: str,
                         supervisor_attributes: Dict[str, Any],
-                        project_id: UUID, 
+                        project_id: UUID,
                         supervisor_func: Callable,
                         supervision_context: SupervisionContext) -> UUID:
     """
@@ -691,7 +691,7 @@ def map_result_to_decision(result: SupervisionResult) -> SupervisionDecision:
     }
     decision_type = decision_map.get(result.decision.value.lower(), SupervisionDecisionType.ESCALATE)
     modified_output = None
-    if decision_type == SupervisionDecisionType.MODIFY:  
+    if decision_type == SupervisionDecisionType.MODIFY:
         client = APIClientFactory.get_client()
         try:
             assert result.toolcall_id is not UNSET
@@ -706,7 +706,7 @@ def map_result_to_decision(result: SupervisionResult) -> SupervisionDecision:
                 )
         except Exception as e:
             logging.error(f"Error getting tool call history: {e}")
-        
+
         client = APIClientFactory.get_client()
         try:
             assert result.toolcall_id is not UNSET
@@ -721,7 +721,7 @@ def map_result_to_decision(result: SupervisionResult) -> SupervisionDecision:
                 )
         except Exception as e:
             logging.error(f"Error getting tool call history: {e}")
-        
+
     return SupervisionDecision(
         decision=decision_type,
         explanation=result.reasoning,

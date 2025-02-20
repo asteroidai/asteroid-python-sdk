@@ -1,30 +1,15 @@
-import datetime
 import unittest
-import uuid
-from http import HTTPStatus
 from typing import List
-from unittest.mock import MagicMock, ANY, patch
+from unittest.mock import MagicMock, patch
 
-import httpx
 from anthropic.resources import Messages
 from anthropic.types import Message, Usage, TextBlock, ToolUseBlock
-from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageToolCall
-from openai.types.chat.chat_completion import Choice
-from openai.types.chat.chat_completion_message_tool_call import Function
+from openai.types.chat import ChatCompletion
 
-from asteroid_sdk.api.api_logger import APILogger
-from asteroid_sdk.api.asteroid_chat_supervision_manager import AsteroidChatSupervisionManager
-from asteroid_sdk.api.generated.asteroid_api_client import Client
-from asteroid_sdk.api.generated.asteroid_api_client.models import Tool, ToolAttributes, ChatIds, ChoiceIds, ToolCallIds, \
-    SupervisorChain, Supervisor, SupervisorType, SupervisorAttributes
-from asteroid_sdk.api.supervision_runner import SupervisionRunner
-from asteroid_sdk.supervision.config import ExecutionMode, RejectionPolicy, MultiSupervisorResolution
+from asteroid_sdk.supervision.config import ExecutionMode
 from asteroid_sdk.supervision.helpers.anthropic_helper import AnthropicSupervisionHelper
 from asteroid_sdk.wrappers.anthropic import CompletionsWrapper
 from tests.acceptance.abstract_acceptance_test import AbstractAcceptanceTest
-from tests.acceptance.init_asteroid import InitAsteroidForTestsConfig, init_asteroid_for_tests
-from tests.helper.api.mock_api import make_created_response_with_id, make_ok_response
-from tests.helper.tools.get_weather import get_weather_tool_object_dict
 
 
 class TestAnthropic(AbstractAcceptanceTest):
@@ -72,7 +57,7 @@ class TestAnthropic(AbstractAcceptanceTest):
 
     @patch('asteroid_sdk.registration.helper.APIClientFactory.get_client')
     def test_resamples_and_then_works(self, mock_get_client):
-        self.resamples_then_works_globals(mock_get_client)
+        self.resamples_then_works_globals(mock_get_client, True)
         # Mock call to LM
         # Note- the allow: true param is what the supervisor is after to approve
         desired_completion_message = self.create_message_with_tool_calls(
