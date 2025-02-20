@@ -14,7 +14,7 @@ include-package-data = true
 
 [project]
 name = "asteroid_sdk"
-version = "0.1.27"
+version = "0.1.28"
 description = "A Python SDK for Asteroid"
 authors = [
     { name = "Asteroid", email = "founders@asteroid.ai" }
