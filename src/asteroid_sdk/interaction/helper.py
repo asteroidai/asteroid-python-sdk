@@ -18,12 +18,11 @@ from asteroid_sdk.api.generated.asteroid_api_client.models.update_run_metadata_b
 from asteroid_sdk.api.generated.asteroid_api_client.models.get_create_file_url_body import GetCreateFileURLBody
 import requests
 
-async def wait_for_unpaused(run_id: str):
+async def wait_for_unpaused(run_id: str, timeout: int = 300):
     """Wait until the run is no longer in paused state."""
     client = APIClientFactory.get_client()
 
     start_time = time.time()
-    timeout = 1200 # 20 minute timeout
         
     while True:
         try:
@@ -39,6 +38,7 @@ async def wait_for_unpaused(run_id: str):
             # Check if we've exceeded timeout
             if time.time() - start_time > timeout:
                 logging.error(f"Timeout waiting for run {run_id} to unpause")
+                fail_run(run_id, f"Timeout waiting for run {run_id} to unpause")
                 break
                 
             logging.info(f"Run {run_id} is paused, waiting for unpaused state...")

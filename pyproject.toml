@@ -13,13 +13,13 @@ include-package-data = true
 "asteroid_sdk.supervision.prompts" = ["*.jinja"]
 
 [project]
+license = { file = "LICENSE" }
 name = "asteroid_sdk"
-version = "0.1.28"
+version = "0.1.29"
 description = "A Python SDK for Asteroid"
 authors = [
     { name = "Asteroid", email = "founders@asteroid.ai" }
 ]
-license = { file = "LICENSE" }
 readme = "README.md"
 dependencies = [
     "requests>=2.28.0",
